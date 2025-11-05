@@ -1,30 +1,15 @@
-########################################################################################################################
-# Outputs
-########################################################################################################################
-
-#
-# Developer tips:
-#   - Below are some good practise sample outputs
-#   - They should be updated for outputs applicable to the module being added
-#   - Use variable validation when possible
-#
-
-output "account_id" {
-  description = "An alpha-numeric value identifying the account ID."
-  value       = ibm_resource_instance.cos_instance.account_id
+output "helm_release_name" {
+  description = "Name of the deployed Helm release"
+  value       = helm_release.dsc_chart.name
 }
 
-output "guid" {
-  description = "The GUID of the resource instance."
-  value       = ibm_resource_instance.cos_instance.guid
+output "helm_release_status" {
+  description = "Status of the Helm release"
+  value       = helm_release.dsc_chart.status
 }
 
-output "id" {
-  description = "The unique identifier of the resource instance."
-  value       = ibm_resource_instance.cos_instance.id
-}
 
-output "crn" {
-  description = "The CRN of the resource instance."
-  value       = ibm_resource_instance.cos_instance.crn
+output "protection_policy_name" {
+  description = "Name of the created protection policy"
+  value       = ibm_backup_recovery_protection_policy.protection_policy.name
 }

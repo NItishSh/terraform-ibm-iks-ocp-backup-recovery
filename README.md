@@ -1,50 +1,34 @@
-<!-- Update this title with a descriptive name. Use sentence case. -->
-# Terraform modules template project
+# IBM Backup & Recovery for IKS/ROKS with Cohesity DSC
 
-<!--
-Update status and "latest release" badges:
-  1. For the status options, see https://terraform-ibm-modules.github.io/documentation/#/badge-status
-  2. Update the "latest release" badge to point to the correct module's repo. Replace "terraform-ibm-module-template" in two places.
--->
 [![Incubating (Not yet consumable)](https://img.shields.io/badge/status-Incubating%20(Not%20yet%20consumable)-red)](https://terraform-ibm-modules.github.io/documentation/#/badge-status)
 [![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/releases/latest)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com/)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
 
-<!--
-Add a description of modules in this repo.
-Expand on the repo short description in the .github/settings.yml file.
+This module deploys the **Cohesity Data Source Connector (DSC)** via Helm into an **IBM Kubernetes Service (IKS) or Red Hat OpenShift on IBM Cloud (ROKS)** cluster, registers the cluster with **IBM Backup & Recovery Service**, and creates a **configurable protection policy**.
 
-For information, see "Module names and descriptions" at
-https://terraform-ibm-modules.github.io/documentation/#/implementation-guidelines?id=module-names-and-descriptions
--->
+It automates:
+- Security group rules for DSC-to-BRS communication
+- Helm deployment of the DSC chart
+- ServiceAccount + token generation (in `default` namespace)
+- Cluster registration with IBM B&R
+- Flexible backup policy with incremental schedules, retention, and optional data lock (WORM)
 
-TODO: Replace this with a description of the modules in this repo.
+---
 
-
-<!-- The following content is automatically populated by the pre-commit hook -->
-<!-- BEGIN OVERVIEW HOOK -->
 ## Overview
 * [terraform-ibm-iks-ocp-backup-recovery](#terraform-ibm-iks-ocp-backup-recovery)
 * [Examples](./examples)
-    * [Advanced example](./examples/advanced)
     * [Basic example](./examples/basic)
+    * [Advanced example](./examples/advanced)
 * [Contributing](#contributing)
-<!-- END OVERVIEW HOOK -->
 
+---
 
-<!-- Replace this heading with the name of the root level module (the repo name) -->
 ## terraform-ibm-iks-ocp-backup-recovery
 
 ### Usage
-
-<!--
-Add an example of the use of the module in the following code block.
-
-Use real values instead of "var.<var_name>" or other placeholder values
-unless real values don't help users know what to change.
--->
 
 ```hcl
 terraform {
@@ -54,98 +38,171 @@ terraform {
       source  = "IBM-Cloud/ibm"
       version = "X.Y.Z"  # Lock into a provider version that satisfies the module constraints
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "2.38.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "3.1.0"
+    }
   }
 }
 
-locals {
-    region = "us-south"
-}
-
 provider "ibm" {
-  ibmcloud_api_key = "XXXXXXXXXX"  # replace with apikey value
-  region           = local.region
+  ibmcloud_api_key = "your-api-key-here"
+  region           = "us-south"
 }
 
-module "module_template" {
-  source            = "terraform-ibm-modules/<replace>/ibm"
-  version           = "X.Y.Z" # Replace "X.Y.Z" with a release version to lock into a specific release
-  region            = local.region
-  name              = "instance-name"
-  resource_group_id = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX" # Replace with the actual ID of resource group to use
+module "backup_recovery" {
+  source  = "terraform-ibm-modules/iks-ocp-backup-recovery/ibm"
+  version = "1.0.0"  # Use latest release
+
+  # --- DSC Helm Chart ---
+  dsc = {
+    release_name       = "cohesity-dsc"
+    chart_name         = "cohesity-dsc-chart"
+    chart_repository   = "oci://your-registry/cohesity-charts"
+    namespace          = "cohesity-dsc"
+    create_namespace   = true
+    chart_version      = "7.2.15"
+    registration_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+    replica_count      = 1
+    timeout            = 1800
+
+    image = {
+      namespace  = "cohesity"
+      repository = "dsc"
+      tag        = "7.2.15"
+      pullPolicy = "IfNotPresent"
+    }
+  }
+
+  # --- B&R Instance ---
+  brsintance = {
+    guid          = "6B29FC40-CA47-1067-B31D-00DD010662DA"
+    region        = "us-south"
+    endpoint_type = "public"
+    tenant_id     = "tenant-67890"
+  }
+
+  # --- Cluster Registration ---
+  cluster_id    = "c1234567890abcdef1234567890abcdef"
+  connection_id = "conn-12345"
+
+  registration = {
+    name = "my-iks-cluster"
+    cluster = {
+      id                = "c1234567890abcdef1234567890abcdef"
+      resource_group_id = "rg-12345"
+      endpoint          = "c1234567890abcdef1234567890abcdef.us-south.containers.cloud.ibm.com"
+      distribution      = "IKS"
+      images = {
+        data_mover              = "icr.io/cohesity/data-mover:7.2.15"
+        velero                  = "icr.io/cohesity/velero:1.9.0"
+        velero_aws_plugin       = "icr.io/cohesity/velero-plugin-aws:1.5.0"
+        velero_openshift_plugin = "icr.io/cohesity/velero-plugin-openshift:1.5.0"
+        init_container          = "icr.io/cohesity/init-container:7.2.15"
+      }
+    }
+  }
+
+  # --- Backup Policy ---
+  policy = {
+    name = "daily-with-weekly-lock"
+
+    schedule = {
+      unit      = "Hours"
+      frequency = 6
+      # Optional layered schedule
+      week_schedule = {
+        day_of_week = ["Sunday"]
+      }
+    }
+
+    retention = {
+      duration = 4
+      unit     = "Weeks"
+      data_lock_config = {
+        mode                           = "Compliance"
+        unit                           = "Years"
+        duration                       = 1
+        enable_worm_on_external_target = true
+      }
+    }
+
+    use_default_backup_target = true
+  }
 }
 ```
 
-### Required access policies
+---
 
-<!-- PERMISSIONS REQUIRED TO RUN MODULE
-If this module requires permissions, uncomment the following block and update
-the sample permissions, following the format.
-Replace the 'Sample IBM Cloud' service and roles with applicable values.
-The required information can usually be found in the services official
-IBM Cloud documentation.
-To view all available service permissions, you can go in the
-console at Manage > Access (IAM) > Access groups and click into an existing group
-(or create a new one) and in the 'Access' tab click 'Assign access'.
--->
+### Required IAM Access Policies
 
-<!--
 You need the following permissions to run this module:
 
-- Service
-    - **Resource group only**
-        - `Viewer` access on the specific resource group
-    - **Sample IBM Cloud** service
-        - `Editor` platform access
-        - `Manager` service access
--->
+- **Backup & Recovery** service
+  - `Editor` platform access
+  - `Manager` service access
+- **Cloud Object Storage**
+  - `Writer` service access (if using COS as backup target)
+- **VPC Infrastructure**
+  - `Editor` on security groups (for DSC outbound rules)
+- **Kubernetes Service**
+  - Access to manage service accounts, secrets, and Helm releases in the target cluster
 
-<!-- NO PERMISSIONS FOR MODULE
-If no permissions are required for the module, uncomment the following
-statement instead the previous block.
--->
+---
 
-<!-- No permissions are needed to run this module.-->
-
-
-<!-- The following content is automatically populated by the pre-commit hook -->
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ### Requirements
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9.0 |
-| <a name="requirement_ibm"></a> [ibm](#requirement\_ibm) | >= 1.71.2, < 2.0.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement_terraform) | >= 1.9.0 |
+| <a name="requirement_ibm"></a> [ibm](#requirement_ibm) | >= 1.85.0, < 2.0.0 |
+| <a name="requirement_kubernetes"></a> [kubernetes](#requirement_kubernetes) | 2.38.0 |
+| <a name="requirement_helm"></a> [helm](#requirement_helm) | 3.1.0 |
 
 ### Modules
 
-No modules.
+| Name | Source | Version |
+|------|--------|---------|
+| dsc_sg_rule | terraform-ibm-modules/security-group/ibm | v2.8.0 |
 
 ### Resources
 
 | Name | Type |
 |------|------|
-| [ibm_resource_instance.cos_instance](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/resource_instance) | resource |
+| [helm_release.dsc_chart](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
+| [kubernetes_namespace.dsc](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
+| [kubernetes_service_account.brsagent](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/service_account) | resource |
+| [kubernetes_cluster_role_binding.brsagent_admin](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/cluster_role_binding) | resource |
+| [kubernetes_secret.brsagent_token](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) | resource |
+| [ibm_backup_recovery_source_registration.source_registration](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/backup_recovery_source_registration) | resource |
+| [ibm_backup_recovery_protection_policy.protection_policy](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/backup_recovery_protection_policy) | resource |
 
 ### Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_name"></a> [name](#input\_name) | A descriptive name used to identify the resource instance. | `string` | n/a | yes |
-| <a name="input_plan"></a> [plan](#input\_plan) | The name of the plan type supported by service. | `string` | `"standard"` | no |
-| <a name="input_resource_group_id"></a> [resource\_group\_id](#input\_resource\_group\_id) | The ID of the resource group where you want to create the service. | `string` | n/a | yes |
-| <a name="input_resource_tags"></a> [resource\_tags](#input\_resource\_tags) | List of resource tag to associate with the instance. | `list(string)` | `[]` | no |
+| <a name="input_dsc"></a> [dsc](#input_dsc) | Configuration for Cohesity DSC Helm chart deployment | `object({...})` | n/a | yes |
+| <a name="input_connection_id"></a> [connection_id](#input_connection_id) | Connection ID for the backup service | `string` | n/a | yes |
+| <a name="input_cluster_id"></a> [cluster_id](#input_cluster_id) | IKS/ROKS cluster ID to register | `string` | n/a | yes |
+| <a name="input_tenant_id"></a> [tenant_id](#input_tenant_id) | IBM Cloud tenant ID | `string` | n/a | yes |
+| <a name="input_registration"></a> [registration](#input_registration) | Kubernetes cluster registration details (sensitive) | `object({...})` | n/a | yes |
+| <a name="input_brsintance"></a> [brsintance](#input_brsintance) | Backup & Recovery instance details (GUID, region, endpoint type) | `object({...})` | n/a | yes |
+| <a name="input_policy"></a> [policy](#input_policy) | Protection policy with flexible schedule, retention, and data lock | `object({...})` | n/a | yes |
 
 ### Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_account_id"></a> [account\_id](#output\_account\_id) | An alpha-numeric value identifying the account ID. |
-| <a name="output_crn"></a> [crn](#output\_crn) | The CRN of the resource instance. |
-| <a name="output_guid"></a> [guid](#output\_guid) | The GUID of the resource instance. |
-| <a name="output_id"></a> [id](#output\_id) | The unique identifier of the resource instance. |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+| <a name="output_helm_release_name"></a> [helm_release_name](#output_helm_release_name) | Name of the deployed Helm release |
+| <a name="output_helm_release_status"></a> [helm_release_status](#output_helm_release_status) | Status of the Helm release |
+| <a name="output_protection_policy_name"></a> [protection_policy_name](#output_protection_policy_name) | Name of the created protection policy |
 
-<!-- Leave this section as is so that your module has a link to local development environment set-up steps for contributors to follow -->
+---
+
 ## Contributing
 
 You can report issues and request features for this module in GitHub issues in the module repo. See [Report an issue or request a feature](https://github.com/terraform-ibm-modules/.github/blob/main/.github/SUPPORT.md).
