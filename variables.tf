@@ -33,13 +33,12 @@ variable "connection_id" {
 
 variable "cluster_id" {
   type        = string
-  description = "IKS/ROKS cluster id that needs to be registered with the Backuu and recovery service."
+  description = "IKS/ROKS cluster id that needs to be registered with the Backup and recovery service."
 }
 variable "registration" {
   type = object({
     name = string
     cluster = object({
-      id                = string
       resource_group_id = string
       endpoint          = string
       distribution      = string
@@ -101,4 +100,10 @@ variable "policy" {
   })
 
   description = "IBM Backup & Recovery Protection Policy – fully validated"
+}
+
+variable "resource_group" {
+  type        = string
+  description = "An existing resource group name to use for this example, if unset a new resource group will be created"
+  default     = null
 }

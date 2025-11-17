@@ -6,7 +6,7 @@ module "dsc_sg_rule" {
   count                        = var.deploy_dsc ? 1 : 0
   source                       = "terraform-ibm-modules/security-group/ibm"
   version                      = "v2.8.0"
-  resource_group               = module.resource_group.resource_group_name
+  resource_group               = var.resource_group
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
   security_group_rules = [
@@ -91,9 +91,6 @@ resource "kubernetes_service_account" "brsagent" {
     name      = "brsagent"
     namespace = "default"
   }
-  depends_on = [
-    helm_release.dsc-chart
-  ]
 }
 
 # Create a cluster role binding for the service account
