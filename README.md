@@ -18,12 +18,10 @@ It automates:
 
 <!-- BEGIN OVERVIEW HOOK -->
 ## Overview
-
-- [terraform-ibm-iks-ocp-backup-recovery](#terraform-ibm-iks-ocp-backup-recovery)
-
-- [Examples](./examples)
-  - [Basic example](./examples/basic)
-- [Contributing](#contributing)
+* [terraform-ibm-iks-ocp-backup-recovery](#terraform-ibm-iks-ocp-backup-recovery)
+* [Examples](./examples)
+    * [Basic example](./examples/basic)
+* [Contributing](#contributing)
 <!-- END OVERVIEW HOOK -->
 
 ## terraform-ibm-iks-ocp-backup-recovery
