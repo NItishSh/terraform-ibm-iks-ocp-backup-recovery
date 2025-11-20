@@ -89,7 +89,7 @@ data "ibm_container_cluster_config" "cluster_config" {
 }
 
 ########################################################################################################################
-# Backup & Recovery Service (BRS) Module
+# Backup & Recovery Service (BRS)
 ########################################################################################################################
 
 module "backup_recovery_instance" {
