@@ -31,6 +31,7 @@ variable "resource_tags" {
 variable "region" {
   type        = string
   description = "Region where resources are created."
+  default     = "au-syd"
 }
 
 variable "access_tags" {
@@ -42,7 +43,7 @@ variable "access_tags" {
 variable "ocp_version" {
   type        = string
   description = "Version of the OCP cluster to provision"
-  default     = "4.18"
+  default     = null
 }
 
 variable "ocp_entitlement" {

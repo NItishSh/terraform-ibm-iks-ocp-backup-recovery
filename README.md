@@ -29,107 +29,70 @@ It automates:
 ### Usage
 
 ```hcl
-terraform {
-  required_version = ">= 1.9.0"
-  required_providers {
-    ibm = {
-      source  = "IBM-Cloud/ibm"
-      version = "X.Y.Z"  # Lock into a provider version that satisfies the module constraints
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "2.38.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "3.1.0"
-    }
-  }
+# ############################################################################
+# Init cluster config for helm
+# ############################################################################
+
+data "ibm_container_cluster_config" "cluster_config" {
+  cluster_name_id = "xxxxxxxxx" # replace with cluster ID or name
 }
+
+# ############################################################################
+# Config providers
+# ############################################################################
 
 provider "ibm" {
-  ibmcloud_api_key = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX" # pragma: allowlist secret
-  region           = "us-south"
+  ibmcloud_api_key = "xxxxxxxxxxxx"  # pragma: allowlist secret
 }
 
+provider "helm" {
+  kubernetes {
+    host                   = data.ibm_container_cluster_config.cluster_config.host
+    token                  = data.ibm_container_cluster_config.cluster_config.token
+    cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
+  }
+  # No registry authentication required - using public registries
+}
+
+provider "kubernetes" {
+  host                   = data.ibm_container_cluster_config.cluster_config.host
+  token                  = data.ibm_container_cluster_config.cluster_config.token
+  cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
+}
+
+# ############################################################################
+# Install DSC
+# ############################################################################
 module "backup_recovery" {
   source  = "terraform-ibm-modules/iks-ocp-backup-recovery/ibm"
   version = "X.Y.Z"  # Replace "X.Y.Z" with a release version to lock into a specific release
-
-  # --- DSC Helm Chart ---
-  dsc = {
-    release_name       = "cohesity-dsc"
-    chart_name         = "cohesity-dsc-chart"
-    chart_repository   = "oci://your-registry/cohesity-charts"
-    namespace          = "cohesity-dsc"
-    create_namespace   = true
-    chart_version      = "7.2.15"
-    registration_token = "XXXXxxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX"
-    replica_count      = 1
-    timeout            = 1800
-
-    image = {
-      namespace  = "cohesity"
-      repository = "dsc"
-      tag        = "7.2.15"
-      pullPolicy = "IfNotPresent"
-    }
-  }
-
+  cluster_id                    = "xxxxxxx" # replace with ID of the cluster
+  cluster_resource_group_id     = "xxxxxxx" # replace with ID of the cluster resource group
+  dsc_registration_token        = "xxxxxxx" # replace with Registration_token
+  connection_id                 = "xxxxxxx" # replace with connection ID
   # --- B&R Instance ---
-  brsintance = {
-    guid          = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX"
-    region        = "us-south"
-    endpoint_type = "public"
-    tenant_id     = "tenant-67890"
+  brs_instance_guid   = "xxxxxxx" # replace with ID of the BRS instance
+  brs_instance_region = var.region
+  brs_endpoint_type   = "public"
+  brs_tenant_id       = "xxxxxxx" # replace with tenant ID of the BRS instance
+  registration_name   = "ocp-dsc"
+  registration_images = {
+    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2"
+    velero                  = "icr.io/ext/brs/velero:7.2.15-p2"
+    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2"
+    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2"
   }
-
-  # --- Cluster Registration ---
-  cluster_id    = "c123XXXXXXXXXXXXxxxxXXXXXxxxxcdef" # pragma: allowlist secret
-  cluster_id    = "c1234567890abcdef1234567890abcdef" # pragma: allowlist secret
-  connection_id = "conn-12345"
-
-  registration = {
-    name = "my-iks-cluster"
-    cluster = {
-      id                = "c123XXXXXXXXXXXXxxxxXXXXXxxxxcdef" # pragma: allowlist secret
-      resource_group_id = "xxXXxxXXxxXXXXxxxxxxXXXXX"
-      endpoint          = "c123XXXXXXXXXXXXxxxxXXXXXxxxxcdef.us-south.containers.cloud.ibm.com"
-      distribution      = "IKS"
-      images = {
-        data_mover              = "icr.io/cohesity/data-mover:7.2.15"
-        velero                  = "icr.io/cohesity/velero:1.9.0"
-        velero_aws_plugin       = "icr.io/cohesity/velero-plugin-aws:1.5.0"
-        velero_openshift_plugin = "icr.io/cohesity/velero-plugin-openshift:1.5.0"
-        init_container          = "icr.io/cohesity/init-container:7.2.15"
-      }
-    }
-  }
-
   # --- Backup Policy ---
   policy = {
-    name = "daily-with-weekly-lock"
-
+    name = "daily-with-monthly-retention"
     schedule = {
       unit      = "Hours"
-      frequency = 6
-      # Optional layered schedule
-      week_schedule = {
-        day_of_week = ["Sunday"]
-      }
+      frequency = 24
     }
-
     retention = {
       duration = 4
       unit     = "Weeks"
-      data_lock_config = {
-        mode                           = "Compliance"
-        unit                           = "Years"
-        duration                       = 1
-        enable_worm_on_external_target = true
-      }
     }
-
     use_default_backup_target = true
   }
 }
@@ -190,7 +153,7 @@ You need the following permissions to run this module:
 | <a name="input_brs_instance_region"></a> [brs\_instance\_region](#input\_brs\_instance\_region) | Region of the Backup & Recovery Service instance. | `string` | n/a | yes |
 | <a name="input_brs_tenant_id"></a> [brs\_tenant\_id](#input\_brs\_tenant\_id) | BRS tenant ID in the format `<tenant-guid>/`. Required for API calls and agent configuration. | `string` | n/a | yes |
 | <a name="input_cluster_config_endpoint_type"></a> [cluster\_config\_endpoint\_type](#input\_cluster\_config\_endpoint\_type) | The type of endpoint to use for the cluster config access: `default`, `private`, `vpe`, or `link`. The `default` value uses the default endpoint of the cluster. | `string` | `"default"` | no |
-| <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | The ID of the cluster to deploy the agent. | `string` | n/a | yes |
+| <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | The ID of the cluster designated for backup and recovery. | `string` | n/a | yes |
 | <a name="input_cluster_resource_group_id"></a> [cluster\_resource\_group\_id](#input\_cluster\_resource\_group\_id) | Resource group ID the cluster is deployed in. | `string` | n/a | yes |
 | <a name="input_connection_id"></a> [connection\_id](#input\_connection\_id) | Connection ID for the backup service | `string` | n/a | yes |
 | <a name="input_dsc_chart"></a> [dsc\_chart](#input\_dsc\_chart) | Name of the Data Source connector Helm chart. | `string` | `"cohesity-dsc-chart"` | no |
@@ -199,12 +162,12 @@ You need the following permissions to run this module:
 | <a name="input_dsc_image"></a> [dsc\_image](#input\_dsc\_image) | Container image for the Data Source Connector. | `string` | `"icr.io/ext/brs/cohesity-data-source-connector_7.2.15-release-20250721"` | no |
 | <a name="input_dsc_image_version_tag"></a> [dsc\_image\_version\_tag](#input\_dsc\_image\_version\_tag) | Image tag for the Data Source Connector container. | `string` | `"6aa24701"` | no |
 | <a name="input_dsc_name"></a> [dsc\_name](#input\_dsc\_name) | Release name for the Data Source Connector Helm deployment. | `string` | `"dsc"` | no |
-| <a name="input_dsc_namespace"></a> [dsc\_namespace](#input\_dsc\_namespace) | Kubernetes namespace where the Data Source Connector will be installed. Will be created if it does not exist. | `string` | `"data-source-connector"` | no |
-| <a name="input_dsc_registration_token"></a> [dsc\_registration\_token](#input\_dsc\_registration\_token) | Registration token generated in the Backup & Recovery Service UI when adding a Kubernetes data source. | `string` | n/a | yes |
+| <a name="input_dsc_namespace"></a> [dsc\_namespace](#input\_dsc\_namespace) | The cluster namespace where the Data Source Connector will be installed. Will be created if it does not exist. | `string` | `"data-source-connector"` | no |
+| <a name="input_dsc_registration_token"></a> [dsc\_registration\_token](#input\_dsc\_registration\_token) | Registration token generated in the Backup & Recovery Service UI when adding a cluster data source. | `string` | n/a | yes |
 | <a name="input_dsc_replicas"></a> [dsc\_replicas](#input\_dsc\_replicas) | Number of Data Source Connector pods to run (typically 1). | `number` | `1` | no |
-| <a name="input_kube_type"></a> [kube\_type](#input\_kube\_type) | Specify the type of target cluster for the agent. Accepted values are `ROKS` or `IKS`. | `string` | `"ROKS"` | no |
-| <a name="input_policy"></a> [policy](#input\_policy) | IBM Backup & Recovery Protection Policy - fully validated | <pre>object({<br/>    name = string<br/>    schedule = object({<br/>      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs<br/>      frequency = number # required when unit is Minutes/Hours/Days<br/><br/>      # Optional extra layers (allowed even when unit = Minutes)<br/>      minute_schedule = optional(object({ frequency = number }))<br/>      hour_schedule   = optional(object({ frequency = number }))<br/>      day_schedule    = optional(object({ frequency = number }))<br/>      week_schedule   = optional(object({ day_of_week = list(string) }))<br/>      month_schedule = optional(object({<br/>        day_of_week   = optional(list(string))<br/>        week_of_month = optional(string) # First, Second, Third, Fourth, Last<br/>        day_of_month  = optional(number)<br/>      }))<br/>      year_schedule = optional(object({ day_of_year = string })) # First, Last<br/>    })<br/><br/>    retention = object({<br/>      duration = number<br/>      unit     = string # Days, Weeks, Months, Years<br/><br/>      data_lock_config = optional(object({<br/>        mode                           = string # Compliance, Administrative<br/>        unit                           = string # Days, Weeks, Months, Years<br/>        duration                       = number<br/>        enable_worm_on_external_target = optional(bool, false)<br/>      }))<br/>    })<br/><br/>    use_default_backup_target = optional(bool, true)<br/>  })</pre> | n/a | yes |
-| <a name="input_registration_images"></a> [registration\_images](#input\_registration\_images) | Registration image | <pre>object({<br/>    data_mover              = optional(string, null)<br/>    velero                  = optional(string, null)<br/>    velero_aws_plugin       = optional(string, null)<br/>    velero_openshift_plugin = optional(string, null)<br/>    init_container          = optional(string, null)<br/>  })</pre> | `{}` | no |
+| <a name="input_kube_type"></a> [kube\_type](#input\_kube\_type) | Specify the type of target cluster for the backup and recovery. Accepted values are `ROKS` or `IKS`. | `string` | `"ROKS"` | no |
+| <a name="input_policy"></a> [policy](#input\_policy) | The backup schedule and retentions of a Protection Policy. | <pre>object({<br/>    name = string<br/>    schedule = object({<br/>      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs<br/>      frequency = number # required when unit is Minutes/Hours/Days<br/><br/>      # Optional extra layers (allowed even when unit = Minutes)<br/>      minute_schedule = optional(object({ frequency = number }))<br/>      hour_schedule   = optional(object({ frequency = number }))<br/>      day_schedule    = optional(object({ frequency = number }))<br/>      week_schedule   = optional(object({ day_of_week = list(string) }))<br/>      month_schedule = optional(object({<br/>        day_of_week   = optional(list(string))<br/>        week_of_month = optional(string) # First, Second, Third, Fourth, Last<br/>        day_of_month  = optional(number)<br/>      }))<br/>      year_schedule = optional(object({ day_of_year = string })) # First, Last<br/>    })<br/><br/>    retention = object({<br/>      duration = number<br/>      unit     = string # Days, Weeks, Months, Years<br/><br/>      data_lock_config = optional(object({<br/>        mode                           = string # Compliance, Administrative<br/>        unit                           = string # Days, Weeks, Months, Years<br/>        duration                       = number<br/>        enable_worm_on_external_target = optional(bool, false)<br/>      }))<br/>    })<br/><br/>    use_default_backup_target = optional(bool, true)<br/>  })</pre> | n/a | yes |
+| <a name="input_registration_images"></a> [registration\_images](#input\_registration\_images) | The images required for backup and recovery registration. | <pre>object({<br/>    data_mover              = optional(string, null)<br/>    velero                  = optional(string, null)<br/>    velero_aws_plugin       = optional(string, null)<br/>    velero_openshift_plugin = optional(string, null)<br/>    init_container          = optional(string, null)<br/>  })</pre> | `{}` | no |
 | <a name="input_registration_name"></a> [registration\_name](#input\_registration\_name) | Name of the registration. | `string` | n/a | yes |
 
 ### Outputs

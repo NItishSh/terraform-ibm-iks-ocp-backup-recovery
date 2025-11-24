@@ -4,7 +4,7 @@
 
 variable "cluster_id" {
   type        = string
-  description = "The ID of the cluster to deploy the agent."
+  description = "The ID of the cluster designated for backup and recovery."
 }
 
 variable "cluster_resource_group_id" {
@@ -24,7 +24,7 @@ variable "cluster_config_endpoint_type" {
 }
 
 variable "kube_type" {
-  description = "Specify the type of target cluster for the agent. Accepted values are `ROKS` or `IKS`."
+  description = "Specify the type of target cluster for the backup and recovery. Accepted values are `ROKS` or `IKS`."
   type        = string
   default     = "ROKS"
 
@@ -36,7 +36,6 @@ variable "kube_type" {
     error_message = "Accepted values are: ROKS or IKS."
   }
 }
-
 
 ##############################################################################
 # Data Source Connector (BRS)
@@ -99,14 +98,14 @@ variable "dsc_replicas" {
 
 variable "dsc_namespace" {
   type        = string
-  description = "Kubernetes namespace where the Data Source Connector will be installed. Will be created if it does not exist."
+  description = "The cluster namespace where the Data Source Connector will be installed. Will be created if it does not exist."
   default     = "data-source-connector"
   nullable    = false
 }
 
 variable "dsc_registration_token" {
   type        = string
-  description = "Registration token generated in the Backup & Recovery Service UI when adding a Kubernetes data source."
+  description = "Registration token generated in the Backup & Recovery Service UI when adding a cluster data source."
   sensitive   = true
   nullable    = false
 }
@@ -164,7 +163,7 @@ variable "registration_images" {
     init_container          = optional(string, null)
   })
   default     = {}
-  description = "Registration image"
+  description = "The images required for backup and recovery registration."
 }
 
 variable "policy" {
@@ -202,5 +201,5 @@ variable "policy" {
     use_default_backup_target = optional(bool, true)
   })
 
-  description = "IBM Backup & Recovery Protection Policy - fully validated"
+  description = "The backup schedule and retentions of a Protection Policy."
 }

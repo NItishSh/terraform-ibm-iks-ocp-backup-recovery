@@ -91,7 +91,6 @@ resource "kubernetes_service_account" "brsagent" {
 
 # Create a cluster role binding for the service account
 resource "kubernetes_cluster_role_binding" "brsagent_admin" {
-  depends_on = [kubernetes_service_account.brsagent]
   metadata {
     name = "brsagent-admin"
   }
@@ -109,7 +108,6 @@ resource "kubernetes_cluster_role_binding" "brsagent_admin" {
 
 # Create a secret to store the service account token
 resource "kubernetes_secret" "brsagent_token" {
-  depends_on = [kubernetes_service_account.brsagent]
   metadata {
     name      = "brsagent-token"
     namespace = var.dsc_namespace
