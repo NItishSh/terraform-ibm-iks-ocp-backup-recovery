@@ -94,7 +94,7 @@ data "ibm_container_cluster_config" "cluster_config" {
 
 module "backup_recovery_instance" {
   source            = "terraform-ibm-modules/backup-recovery/ibm"
-  version           = "v1.0.0"
+  version           = "v1.1.0"
   region            = var.region
   resource_group_id = module.resource_group.resource_group_id
   ibmcloud_api_key  = var.ibmcloud_api_key
