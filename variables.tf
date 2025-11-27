@@ -64,7 +64,7 @@ variable "dsc_chart_location" {
 variable "dsc_chart_version" {
   description = "Version of the Data Source Connector Helm chart to deploy."
   type        = string
-  default     = "7.2.15-release-20250721-6aa24701"
+  default     = "7.2.15-release-20250721-6aa24701" # The version doesn’t follow standard versioning, so Renovate can’t update it.
   nullable    = false
 }
 
@@ -78,7 +78,7 @@ variable "dsc_image" {
 variable "dsc_image_version_tag" {
   description = "Image tag for the Data Source Connector container."
   type        = string
-  default     = "6aa24701"
+  default     = "6aa24701" # The version doesn’t follow standard versioning, so Renovate can’t update it.
   nullable    = false
 }
 
