@@ -31,7 +31,7 @@ variable "resource_tags" {
 variable "region" {
   type        = string
   description = "Region where resources are created."
-  default     = "au-syd"
+  default     = "us-east"
 }
 
 variable "access_tags" {

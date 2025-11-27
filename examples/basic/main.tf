@@ -128,10 +128,10 @@ module "backup_recover_protect_ocp" {
   }
   # --- Backup Policy ---
   policy = {
-    name = "daily-with-monthly-retention"
+    name = "${var.prefix}-retention"
     schedule = {
       unit      = "Hours"
-      frequency = 24
+      frequency = 6
     }
     retention = {
       duration = 4
