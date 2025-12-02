@@ -26,12 +26,12 @@ variable "cluster_config_endpoint_type" {
 variable "kube_type" {
   description = "Specify the type of target cluster for the backup and recovery. Accepted values are `ROKS` or `IKS`."
   type        = string
-  default     = "ROKS"
+  default     = "openshift"
 
   validation {
     condition = contains([
-      "ROKS",
-      "IKS",
+      "openshift",
+      "kubernetes",
     ], var.kube_type)
     error_message = "Accepted values are: ROKS or IKS."
   }
@@ -166,7 +166,12 @@ variable "registration_images" {
     velero_openshift_plugin = optional(string, null)
     init_container          = optional(string, null)
   })
-  default     = {}
+  default     = {
+    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2"
+    velero                  = "icr.io/ext/brs/velero:7.2.15-p2"
+    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2"
+    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2"
+  }
   description = "The images required for backup and recovery registration."
 }
 

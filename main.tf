@@ -127,7 +127,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   name            = var.registration_name
   kubernetes_params {
     endpoint                               = var.cluster_config_endpoint_type == "private" || data.ibm_container_vpc_cluster.cluster.private_service_endpoint ? data.ibm_container_vpc_cluster.cluster.private_service_endpoint_url : data.ibm_container_vpc_cluster.cluster.public_service_endpoint_url
-    kubernetes_distribution                = var.kube_type == "ROKS" ? "kROKS" : "kIKS"
+    kubernetes_distribution                = var.kube_type == "openshift" ? "kROKS" : "kIKS"
     data_mover_image_location              = var.registration_images.data_mover
     velero_image_location                  = var.registration_images.velero
     velero_aws_plugin_image_location       = var.registration_images.velero_aws_plugin

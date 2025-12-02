@@ -1,18 +1,18 @@
 # IBM Backup & Recovery for IKS/ROKS with Cohesity DSC
 
-[![Graduated (Supported)](https://img.shields.io/badge/Status-Graduated%20(Supported)-brightgreen)](https://terraform-ibm-modules.github.io/documentation/#/badge-status)
+[![Stable (With quality checks)](https://img.shields.io/badge/Status-Stable%20(With%20quality%20checks)-green)](https://terraform-ibm-modules.github.io/documentation/#/badge-status)
 [![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/releases/latest)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com/)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
 
-This module deploys the **Cohesity Data Source Connector (DSC)** via Helm into an **IBM Kubernetes Service (IKS) or Red Hat OpenShift on IBM Cloud (ROKS)** cluster, registers the cluster with **IBM Backup & Recovery Service**, and creates a **configurable protection policy**.
+This module deploys the **Cohesity Data Source Connector (DSC)** via Helm into an **IBM Kubernetes Service (IKS) or Red Hat OpenShift on IBM Cloud ** cluster, registers the cluster with **[IBM Backup & Recovery Service](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks)**, and creates a **configurable protection policy**.
 
 It automates:
 
 - Security group rules for DSC-to-BRS communication
 - Helm deployment of the DSC chart
-- ServiceAccount + token generation (in `default` namespace)
+- ServiceAccount + token generation
 - Cluster registration with IBM B&R
 - Flexible backup policy with incremental schedules, retention, and optional data lock (WORM)
 
@@ -51,7 +51,9 @@ provider "helm" {
     token                  = data.ibm_container_cluster_config.cluster_config.token
     cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
   }
-  # No registry authentication required - using public registries
+  registries = [
+    { url = "oci://icr.io", username = "iamapikey", password = var.ibmcloud_api_key }
+  ]
 }
 
 provider "kubernetes" {
@@ -112,7 +114,8 @@ You need the following permissions to run this module:
 - **VPC Infrastructure**
   - `Editor` on security groups (for DSC outbound rules)
 - **Kubernetes Service**
-  - Access to manage service accounts, secrets, and Helm releases in the target cluster
+  - `Viewer` platform access
+  - `Manager` service access
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ### Requirements

@@ -112,7 +112,7 @@ module "backup_recover_protect_ocp" {
   cluster_id                = module.ocp_base.cluster_id
   cluster_resource_group_id = module.resource_group.resource_group_id
   dsc_registration_token    = module.backup_recovery_instance.registration_token
-  kube_type                 = "ROKS"
+  kube_type                 = "openshift"
   connection_id             = module.backup_recovery_instance.connection_id
   # --- B&R Instance ---
   brs_instance_guid   = module.backup_recovery_instance.brs_instance_guid
@@ -120,12 +120,6 @@ module "backup_recover_protect_ocp" {
   brs_endpoint_type   = "public"
   brs_tenant_id       = module.backup_recovery_instance.tenant_id
   registration_name   = module.ocp_base.cluster_name
-  registration_images = {
-    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2"
-    velero                  = "icr.io/ext/brs/velero:7.2.15-p2"
-    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2"
-    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2"
-  }
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"
