@@ -72,7 +72,7 @@ module "ocp_base" {
   resource_group_id    = module.resource_group.resource_group_id
   region               = var.region
   tags                 = var.resource_tags
-  cluster_name         = var.prefix
+  cluster_name         = "${var.prefix}-cluster"
   force_delete_storage = true
   vpc_id               = ibm_is_vpc.vpc.id
   vpc_subnets          = local.cluster_vpc_subnets
@@ -88,17 +88,27 @@ data "ibm_container_cluster_config" "cluster_config" {
   admin             = true
 }
 
+# Sleep to allow RBAC sync on cluster
+resource "time_sleep" "wait_operators" {
+  depends_on      = [data.ibm_container_cluster_config.cluster_config]
+  create_duration = "60s"
+}
+
 ########################################################################################################################
 # Backup & Recovery Service (BRS)
 ########################################################################################################################
 
 module "backup_recovery_instance" {
-  source            = "terraform-ibm-modules/backup-recovery/ibm"
-  version           = "v1.1.0"
-  region            = var.region
-  resource_group_id = module.resource_group.resource_group_id
-  ibmcloud_api_key  = var.ibmcloud_api_key
-  tags              = var.resource_tags
+  source                = "terraform-ibm-modules/backup-recovery/ibm"
+  version               = "v1.1.0"
+  region                = var.region
+  resource_group_id     = module.resource_group.resource_group_id
+  ibmcloud_api_key      = var.ibmcloud_api_key
+  tags                  = var.resource_tags
+  instance_name         = "${var.prefix}-brs-instance"
+  connection_name       = "${var.prefix}-brs-connection"
+  create_new_connection = true
+  create_new_instance   = true
 }
 
 

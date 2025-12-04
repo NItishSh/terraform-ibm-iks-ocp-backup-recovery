@@ -71,9 +71,9 @@ resource "helm_release" "data_source_connector" {
         registrationToken = var.dsc_registration_token
       }
       image = {
-        namespace  = element(split("/", var.dsc_image), 1)
-        repository = "${element(split("/", var.dsc_image), 2)}/${element(split("/", var.dsc_image), 3)}"
-        tag        = var.dsc_image_version_tag
+        namespace  = element(split("/", var.dsc_image_version), 1)
+        repository = "${element(split("/", var.dsc_image_version), 2)}/${element(split("/", split(":", var.dsc_image_version)[0]), 3)}"
+        tag        = split("@", split(":", var.dsc_image_version)[1])[0]
       }
       replicaCount     = var.dsc_replicas
       fullnameOverride = var.dsc_name

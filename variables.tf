@@ -24,7 +24,7 @@ variable "cluster_config_endpoint_type" {
 }
 
 variable "kube_type" {
-  description = "Specify the type of target cluster for the backup and recovery. Accepted values are `ROKS` or `IKS`."
+  description = "Specify the type of target cluster for the backup and recovery. Accepted values are `openshift` or `kubernetes`."
   type        = string
   default     = "openshift"
 
@@ -57,29 +57,26 @@ variable "dsc_chart" {
 variable "dsc_chart_location" {
   description = "OCI registry location of the Data Source Connector Helm chart."
   type        = string
-  default     = "oci://icr.io/ext/brs" # Public registry - no authentication required
+  default     = "oci://icr.io/ext/brs"
   nullable    = false
 }
 
 variable "dsc_chart_version" {
   description = "Version of the Data Source Connector Helm chart to deploy."
   type        = string
-  default     = "7.2.15-release-20250721-6aa24701" # The version doesn’t follow standard versioning, so Renovate can’t update it.
+  default     = "7.2.15-release-20250721-6aa24701"
   nullable    = false
 }
 
-variable "dsc_image" {
+variable "dsc_image_version" {
   description = "Container image for the Data Source Connector."
   type        = string
-  default     = "icr.io/ext/brs/cohesity-data-source-connector_7.2.15-release-20250721"
+  default     = "icr.io/ext/brs/cohesity-data-source-connector_7.2.15-release-20250721:6aa24701@sha256:e23ce2167e62395f2b01d77cf63fee497c5fe786f03c06a62b00313e465ef837"
   nullable    = false
-}
-
-variable "dsc_image_version_tag" {
-  description = "Image tag for the Data Source Connector container."
-  type        = string
-  default     = "6aa24701" # The version doesn’t follow standard versioning, so Renovate can’t update it.
-  nullable    = false
+  validation {
+    condition     = length(split("@", var.dsc_image_version)[0]) > 0
+    error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<semver-tag>@sha256:<64-hex-digest>'." 
+  }
 }
 
 variable "dsc_name" {
@@ -90,7 +87,12 @@ variable "dsc_name" {
 }
 
 variable "dsc_replicas" {
-  description = "Number of Data Source Connector pods to run (typically 1)."
+  description = <<-EOT
+  Number of Data Source Connector podsto run.
+  Recommended values:
+    • 3 – for high availability across multiple nodes/zones (strongly recommended in production)
+    • 1 – only for dev/test or single-node clusters
+  EOT
   type        = number
   default     = 1
   nullable    = false
@@ -131,14 +133,14 @@ variable "brs_instance_region" {
   nullable    = false
   validation {
     condition     = contains(["us-east"], var.brs_instance_region)
-    error_message = "IKS/ROKS backup recovery is only supported in these regions: \"us-east\"."
+    error_message = "Kubernetes & Opernshift backup recovery is only supported in these regions: \"us-east\"."
   }
 }
 
 variable "brs_endpoint_type" {
   type        = string
   description = "The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'."
-  default     = "public"
+  default     = "private"
 
   validation {
     condition     = contains(["public", "private"], var.brs_endpoint_type)
@@ -160,17 +162,17 @@ variable "registration_name" {
 
 variable "registration_images" {
   type = object({
-    data_mover              = optional(string, null)
-    velero                  = optional(string, null)
-    velero_aws_plugin       = optional(string, null)
-    velero_openshift_plugin = optional(string, null)
+    data_mover              = string
+    velero                  = string
+    velero_aws_plugin       = string
+    velero_openshift_plugin = string
     init_container          = optional(string, null)
   })
   default     = {
-    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2"
-    velero                  = "icr.io/ext/brs/velero:7.2.15-p2"
-    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2"
-    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2"
+    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2@sha256:6d1c55ec9d3f4a08cab7595b3d70d489e53c8f5ca310c141da5068755a46a282"
+    velero                  = "icr.io/ext/brs/velero:7.2.15-p2@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041"
+    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13"
+    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"
   }
   description = "The images required for backup and recovery registration."
 }
@@ -209,6 +211,18 @@ variable "policy" {
 
     use_default_backup_target = optional(bool, true)
   })
+  default = {
+    name                      = "default-policy"
+    schedule = {
+      unit      = "Hours"
+      frequency = 6
+    }
+    retention = {
+      duration = 4
+      unit     = "Weeks"
+    }
+    use_default_backup_target = true
+  }
 
   description = "The backup schedule and retentions of a Protection Policy."
 }

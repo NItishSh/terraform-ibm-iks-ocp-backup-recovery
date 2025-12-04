@@ -4,15 +4,15 @@ terraform {
   required_providers {
     ibm = {
       source  = "IBM-Cloud/ibm"
-      version = ">= 1.85.0, < 2.0.0"
+      version = ">= 1.85.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = ">=2.38.0, <3.0.0"
+      version = ">= 2.38.0"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = ">=3.1.0, <4.0.0"
+      version = ">= 3.1.0"
     }
   }
 }

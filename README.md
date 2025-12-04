@@ -6,7 +6,7 @@
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com/)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
 
-This module deploys the **Cohesity Data Source Connector (DSC)** via Helm into an **IBM Kubernetes Service (IKS) or Red Hat OpenShift on IBM Cloud ** cluster, registers the cluster with **[IBM Backup & Recovery Service](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks)**, and creates a **configurable protection policy**.
+This module deploys the **Cohesity Data Source Connector (DSC)** via Helm into an **IBM Kubernetes Service (IKS) or Red Hat OpenShift on IBM Cloud** cluster, registers the cluster with **[IBM Backup & Recovery Service](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks)**, and creates a **configurable protection policy**.
 
 It automates:
 
@@ -78,12 +78,6 @@ module "backup_recovery" {
   brs_endpoint_type   = "public"
   brs_tenant_id       = "xxxxxxx" # replace with tenant ID of the BRS instance
   registration_name   = "ocp-dsc"
-  registration_images = {
-    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2"
-    velero                  = "icr.io/ext/brs/velero:7.2.15-p2"
-    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2"
-    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2"
-  }
   # --- Backup Policy ---
   policy = {
     name = "daily-with-monthly-retention"
@@ -100,8 +94,6 @@ module "backup_recovery" {
 }
 ```
 
----
-
 ### Required IAM Access Policies
 
 You need the following permissions to run this module:
@@ -115,7 +107,7 @@ You need the following permissions to run this module:
   - `Editor` on security groups (for DSC outbound rules)
 - **Kubernetes Service**
   - `Viewer` platform access
-  - `Manager` service access
+  - `Administrator` service access
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ### Requirements
