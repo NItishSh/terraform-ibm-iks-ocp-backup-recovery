@@ -27,7 +27,8 @@ func setupOptions(t *testing.T, prefix string, dir string) *testhelper.TestOptio
 		Region:        region,
 		IgnoreUpdates: testhelper.Exemptions{
 			List: []string{"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
-				"module.backup_recover_protect_ocp.kubernetes_service_account.brsagent"},
+				"module.backup_recover_protect_ocp.kubernetes_service_account.brsagent",
+				"module.backup_recover_protect_ocp.helm_release.data_source_connector"},
 		},
 	})
 	return options
