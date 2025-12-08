@@ -1,6 +1,6 @@
 # Kubernetes example
 
-This example provisions VPC, ROKS cluster, COS instance, and a fully integrated Backup & Recovery environment with policies, source registration, connectivity, and data source connector deployment.
+This example provisions VPC, kubernetes cluster, and a fully integrated Backup & Recovery environment with policies, source registration, connectivity, and data source connector deployment.
 
 A kubernetes example that will provision the following:
 

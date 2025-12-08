@@ -1,6 +1,6 @@
 # Openshift example
 
-This example provisions VPC, ROKS cluster, COS instance, and a fully integrated Backup & Recovery environment with policies, source registration, connectivity, and data source connector deployment.
+This example provisions VPC, Openshift cluster, COS instance, and a fully integrated Backup & Recovery environment with policies, source registration, connectivity, and data source connector deployment.
 
 A openshift example that will provision the following:
 
