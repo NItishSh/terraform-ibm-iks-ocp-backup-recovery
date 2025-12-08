@@ -20,7 +20,8 @@ It automates:
 ## Overview
 * [terraform-ibm-iks-ocp-backup-recovery](#terraform-ibm-iks-ocp-backup-recovery)
 * [Examples](./examples)
-    * [Basic example](./examples/basic)
+    * [Openshift example](./examples/openshift)
+    * [Kubernetes example](./examples/kubernetes/)
 * [Contributing](#contributing)
 <!-- END OVERVIEW HOOK -->
 

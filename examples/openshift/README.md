@@ -1,8 +1,8 @@
-# Basic example
+# Openshift example
 
 This example provisions VPC, ROKS cluster, COS instance, and a fully integrated Backup & Recovery environment with policies, source registration, connectivity, and data source connector deployment.
 
-A basic example that will provision the following:
+A openshift example that will provision the following:
 
 - A new resource group, if an existing one is not passed in.
 - A basic VPC and subnet with public gateway enabled.
