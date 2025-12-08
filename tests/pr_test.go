@@ -12,7 +12,7 @@ import (
 const resourceGroup = "geretain-test-resources"
 
 // Ensure every example directory has a corresponding test
-const basicExampleDir = "examples/basic"
+const basicExampleDir = "examples/openshift"
 
 var region = "us-east"
 

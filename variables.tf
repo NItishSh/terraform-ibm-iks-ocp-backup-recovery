@@ -37,6 +37,28 @@ variable "kube_type" {
   }
 }
 
+variable "wait_till" {
+  description = "To avoid long wait times when you run your Terraform code, you can specify the stage when you want Terraform to mark the cluster resource creation as completed. Depending on what stage you choose, the cluster creation might not be fully completed and continues to run in the background. However, your Terraform code can continue to run without waiting for the cluster to be fully created. Supported args are `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` and `Normal`"
+  type        = string
+  default     = "Normal"
+
+  validation {
+    error_message = "`wait_till` value must be one of `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` or `Normal`."
+    condition = contains([
+      "MasterNodeReady",
+      "OneWorkerNodeReady",
+      "IngressReady",
+      "Normal"
+    ], var.wait_till)
+  }
+}
+
+variable "wait_till_timeout" {
+  description = "Timeout for wait_till in minutes."
+  type        = number
+  default     = 90
+}
+
 ##############################################################################
 # Data Source Connector (BRS)
 ##############################################################################
@@ -166,13 +188,14 @@ variable "registration_images" {
     velero                  = string
     velero_aws_plugin       = string
     velero_openshift_plugin = string
-    init_container          = optional(string, null)
+    init_container          = string
   })
   default     = {
     data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.15-p2@sha256:6d1c55ec9d3f4a08cab7595b3d70d489e53c8f5ca310c141da5068755a46a282"
     velero                  = "icr.io/ext/brs/velero:7.2.15-p2@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041"
     velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13"
     velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"
+    init_container          = ""
   }
   description = "The images required for backup and recovery registration."
   nullable = false
