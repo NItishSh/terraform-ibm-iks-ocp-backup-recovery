@@ -12,49 +12,56 @@ import (
 const resourceGroup = "geretain-test-resources"
 
 // Ensure every example directory has a corresponding test
-const advancedExampleDir = "examples/advanced"
-const basicExampleDir = "examples/basic"
+const ocpExampleDir = "examples/openshift"
+const iksExampleDir = "examples/kubernetes"
 
+var region = "us-east"
+
+// ibm_backup_recovery_source_registration requires ignoring updates to kubernetes_params fields which will be fixed in future provider versions
 func setupOptions(t *testing.T, prefix string, dir string) *testhelper.TestOptions {
 	options := testhelper.TestOptionsDefaultWithVars(&testhelper.TestOptions{
 		Testing:       t,
 		TerraformDir:  dir,
 		Prefix:        prefix,
 		ResourceGroup: resourceGroup,
+		Region:        region,
+		IgnoreUpdates: testhelper.Exemptions{
+			List: []string{"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
+				"module.backup_recover_protect_ocp.kubernetes_service_account.brsagent",
+				"module.backup_recover_protect_ocp.helm_release.data_source_connector"},
+		},
 	})
 	return options
 }
 
-// Consistency test for the basic example
-func TestRunBasicExample(t *testing.T) {
+func TestRunOCPExample(t *testing.T) {
 	t.Parallel()
 
-	options := setupOptions(t, "mod-template-basic", basicExampleDir)
+	options := setupOptions(t, "brs", ocpExampleDir)
 
 	output, err := options.RunTestConsistency()
 	assert.Nil(t, err, "This should not have errored")
 	assert.NotNil(t, output, "Expected some output")
 }
 
-func TestRunAdvancedExample(t *testing.T) {
-	t.Parallel()
-
-	options := setupOptions(t, "mod-template-adv", advancedExampleDir)
-
-	output, err := options.RunTestConsistency()
-	assert.Nil(t, err, "This should not have errored")
-	assert.NotNil(t, output, "Expected some output")
-}
-
-// Upgrade test (using advanced example)
 func TestRunUpgradeExample(t *testing.T) {
 	t.Parallel()
 
-	options := setupOptions(t, "mod-template-adv-upg", advancedExampleDir)
+	options := setupOptions(t, "brs-upg", ocpExampleDir)
 
 	output, err := options.RunTestUpgrade()
 	if !options.UpgradeTestSkipped {
 		assert.Nil(t, err, "This should not have errored")
 		assert.NotNil(t, output, "Expected some output")
 	}
+}
+
+func TestRunIKSExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupOptions(t, "brs-adv", iksExampleDir)
+
+	output, err := options.RunTestConsistency()
+	assert.Nil(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
 }
