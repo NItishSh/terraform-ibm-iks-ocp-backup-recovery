@@ -33,3 +33,9 @@ variable "region" {
   description = "Region where resources are created."
   default     = "us-east"
 }
+
+variable "cluster_name_id" {
+  type        = string
+  description = "Name or ID of the existing Kubernetes or OpenShift cluster to protect."
+  default     = null
+}

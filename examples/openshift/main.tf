@@ -18,6 +18,7 @@ module "resource_group" {
 ########################################################################################################################
 
 resource "ibm_is_vpc" "vpc" {
+  count                     = var.cluster_name_id == null ? 1 : 0
   name                      = "${var.prefix}-vpc"
   resource_group            = module.resource_group.resource_group_id
   address_prefix_management = "auto"
@@ -25,19 +26,21 @@ resource "ibm_is_vpc" "vpc" {
 }
 
 resource "ibm_is_public_gateway" "gateway" {
+  count          = var.cluster_name_id == null ? 1 : 0
   name           = "${var.prefix}-gateway-1"
-  vpc            = ibm_is_vpc.vpc.id
+  vpc            = ibm_is_vpc.vpc[0].id
   resource_group = module.resource_group.resource_group_id
   zone           = "${var.region}-1"
 }
 
 resource "ibm_is_subnet" "subnet_zone_1" {
+  count                    = var.cluster_name_id == null ? 1 : 0
   name                     = "${var.prefix}-subnet-1"
-  vpc                      = ibm_is_vpc.vpc.id
+  vpc                      = ibm_is_vpc.vpc[0].id
   resource_group           = module.resource_group.resource_group_id
   zone                     = "${var.region}-1"
   total_ipv4_address_count = 256
-  public_gateway           = ibm_is_public_gateway.gateway.id
+  public_gateway           = ibm_is_public_gateway.gateway[0].id
 }
 
 ########################################################################################################################
@@ -48,9 +51,9 @@ locals {
   cluster_vpc_subnets = {
     default = [
       {
-        id         = ibm_is_subnet.subnet_zone_1.id
-        cidr_block = ibm_is_subnet.subnet_zone_1.ipv4_cidr_block
-        zone       = ibm_is_subnet.subnet_zone_1.zone
+        id         = ibm_is_subnet.subnet_zone_1[0].id
+        cidr_block = ibm_is_subnet.subnet_zone_1[0].ipv4_cidr_block
+        zone       = ibm_is_subnet.subnet_zone_1[0].zone
       }
     ]
   }
@@ -67,6 +70,7 @@ locals {
 }
 
 module "ocp_base" {
+  count                = var.cluster_name_id == null ? 1 : 0
   source               = "terraform-ibm-modules/base-ocp-vpc/ibm"
   version              = "3.71.3"
   resource_group_id    = module.resource_group.resource_group_id
@@ -74,7 +78,7 @@ module "ocp_base" {
   tags                 = var.resource_tags
   cluster_name         = "${var.prefix}-cluster"
   force_delete_storage = true
-  vpc_id               = ibm_is_vpc.vpc.id
+  vpc_id               = ibm_is_vpc.vpc[0].id
   vpc_subnets          = local.cluster_vpc_subnets
   ocp_version          = var.ocp_version
   worker_pools         = local.worker_pools
@@ -82,8 +86,14 @@ module "ocp_base" {
   ocp_entitlement      = var.ocp_entitlement
 }
 
+data "ibm_container_vpc_cluster" "cluster" {
+  count             = var.cluster_name_id == null ? 0 : 1
+  name              = var.cluster_name_id != null ? var.cluster_name_id : module.ocp_base[0].cluster_name
+  resource_group_id = module.resource_group.resource_group_id
+}
+
 data "ibm_container_cluster_config" "cluster_config" {
-  cluster_name_id   = module.ocp_base.cluster_id
+  cluster_name_id   = var.cluster_name_id == null ? module.ocp_base[0].cluster_id : data.ibm_container_vpc_cluster.cluster[0].name
   resource_group_id = module.resource_group.resource_group_id
   admin             = true
 }
@@ -118,18 +128,20 @@ module "backup_recovery_instance" {
 
 
 module "backup_recover_protect_ocp" {
-  source                    = "../.."
-  cluster_id                = module.ocp_base.cluster_id
-  cluster_resource_group_id = module.resource_group.resource_group_id
-  dsc_registration_token    = module.backup_recovery_instance.registration_token
-  kube_type                 = "openshift"
-  connection_id             = module.backup_recovery_instance.connection_id
+  source                       = "../.."
+  cluster_id                   = var.cluster_name_id == null ? module.ocp_base[0].cluster_id : data.ibm_container_vpc_cluster.cluster[0].id
+  cluster_resource_group_id    = module.resource_group.resource_group_id
+  cluster_config_endpoint_type = "private"
+  add_dsc_rules_to_cluster_sg  = false
+  dsc_registration_token       = module.backup_recovery_instance.registration_token
+  kube_type                    = "openshift"
+  connection_id                = module.backup_recovery_instance.connection_id
   # --- B&R Instance ---
   brs_instance_guid   = module.backup_recovery_instance.brs_instance_guid
   brs_instance_region = var.region
   brs_endpoint_type   = "public"
   brs_tenant_id       = module.backup_recovery_instance.tenant_id
-  registration_name   = module.ocp_base.cluster_name
+  registration_name   = var.cluster_name_id == null ? module.ocp_base[0].cluster_name : data.ibm_container_vpc_cluster.cluster[0].name
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"

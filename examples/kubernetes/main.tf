@@ -18,6 +18,7 @@ module "resource_group" {
 ########################################################################################################################
 
 resource "ibm_is_vpc" "vpc" {
+  count                     = var.cluster_name_id == null ? 1 : 0
   name                      = "${var.prefix}-vpc"
   resource_group            = module.resource_group.resource_group_id
   address_prefix_management = "auto"
@@ -25,19 +26,21 @@ resource "ibm_is_vpc" "vpc" {
 }
 
 resource "ibm_is_public_gateway" "gateway" {
+  count          = var.cluster_name_id == null ? 1 : 0
   name           = "${var.prefix}-gateway-1"
-  vpc            = ibm_is_vpc.vpc.id
+  vpc            = ibm_is_vpc.vpc[0].id
   resource_group = module.resource_group.resource_group_id
   zone           = "${var.region}-1"
 }
 
 resource "ibm_is_subnet" "subnet_zone_1" {
+  count                    = var.cluster_name_id == null ? 1 : 0
   name                     = "${var.prefix}-subnet-1"
-  vpc                      = ibm_is_vpc.vpc.id
+  vpc                      = ibm_is_vpc.vpc[0].id
   resource_group           = module.resource_group.resource_group_id
   zone                     = "${var.region}-1"
   total_ipv4_address_count = 256
-  public_gateway           = ibm_is_public_gateway.gateway.id
+  public_gateway           = ibm_is_public_gateway.gateway[0].id
 }
 
 ##############################################################################
@@ -45,13 +48,14 @@ resource "ibm_is_subnet" "subnet_zone_1" {
 ##############################################################################
 
 resource "ibm_container_vpc_cluster" "cluster" {
+  count             = var.cluster_name_id == null ? 1 : 0
   name              = "${var.prefix}-cluster"
-  vpc_id            = ibm_is_vpc.vpc.id
+  vpc_id            = ibm_is_vpc.vpc[0].id
   flavor            = "bx2.4x16"
   resource_group_id = module.resource_group.resource_group_id
   worker_count      = 2
   zones {
-    subnet_id = ibm_is_subnet.subnet_zone_1.id
+    subnet_id = ibm_is_subnet.subnet_zone_1[0].id
     name      = "${var.region}-1"
   }
   wait_till = "IngressReady"
@@ -60,8 +64,13 @@ resource "ibm_container_vpc_cluster" "cluster" {
   disable_outbound_traffic_protection = true
 }
 
+data "ibm_container_vpc_cluster" "cluster" {
+  name              = var.cluster_name_id != null ? var.cluster_name_id : ibm_container_vpc_cluster.cluster[0].name
+  resource_group_id = module.resource_group.resource_group_id
+}
+
 data "ibm_container_cluster_config" "cluster_config" {
-  cluster_name_id   = ibm_container_vpc_cluster.cluster.id
+  cluster_name_id   = data.ibm_container_vpc_cluster.cluster.id
   resource_group_id = module.resource_group.resource_group_id
   admin             = true
 }
@@ -96,18 +105,20 @@ module "backup_recovery_instance" {
 
 
 module "backup_recover_protect_ocp" {
-  source                    = "../.."
-  cluster_id                = ibm_container_vpc_cluster.cluster.id
-  cluster_resource_group_id = module.resource_group.resource_group_id
-  dsc_registration_token    = module.backup_recovery_instance.registration_token
-  kube_type                 = "kubernetes"
-  connection_id             = module.backup_recovery_instance.connection_id
+  source                       = "../.."
+  cluster_id                   = data.ibm_container_vpc_cluster.cluster.id
+  cluster_resource_group_id    = module.resource_group.resource_group_id
+  cluster_config_endpoint_type = "private"
+  add_dsc_rules_to_cluster_sg  = false
+  dsc_registration_token       = module.backup_recovery_instance.registration_token
+  kube_type                    = "kubernetes"
+  connection_id                = module.backup_recovery_instance.connection_id
   # --- B&R Instance ---
   brs_instance_guid   = module.backup_recovery_instance.brs_instance_guid
   brs_instance_region = var.region
   brs_endpoint_type   = "public"
   brs_tenant_id       = module.backup_recovery_instance.tenant_id
-  registration_name   = ibm_container_vpc_cluster.cluster.name
+  registration_name   = data.ibm_container_vpc_cluster.cluster.name
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"

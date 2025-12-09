@@ -51,3 +51,9 @@ variable "ocp_entitlement" {
   description = "Value that is applied to the entitlements for OCP cluster provisioning"
   default     = null
 }
+
+variable "cluster_name_id" {
+  type        = string
+  description = "Name or ID of the existing Kubernetes or OpenShift cluster to protect."
+  default     = null
+}
