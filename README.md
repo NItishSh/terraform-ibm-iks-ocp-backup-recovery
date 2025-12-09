@@ -20,8 +20,8 @@ It automates:
 ## Overview
 * [terraform-ibm-iks-ocp-backup-recovery](#terraform-ibm-iks-ocp-backup-recovery)
 * [Examples](./examples)
+    * [Kubernetes example](./examples/kubernetes)
     * [Openshift example](./examples/openshift)
-    * [Kubernetes example](./examples/kubernetes/)
 * [Contributing](#contributing)
 <!-- END OVERVIEW HOOK -->
 
@@ -53,7 +53,7 @@ provider "helm" {
     cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
   }
   registries = [
-    { url = "oci://icr.io", username = "iamapikey", password = var.ibmcloud_api_key }
+    { url = "oci://icr.io", username = "iamapikey", password = var.ibmcloud_api_key } # pragma: allowlist secret
   ]
 }
 
@@ -116,9 +116,9 @@ You need the following permissions to run this module:
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9.0 |
-| <a name="requirement_helm"></a> [helm](#requirement\_helm) | 3.1.0 |
+| <a name="requirement_helm"></a> [helm](#requirement\_helm) | >=3.1.0, <4.0.0 |
 | <a name="requirement_ibm"></a> [ibm](#requirement\_ibm) | >= 1.85.0, < 2.0.0 |
-| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | 2.38.0 |
+| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >=2.38.0, <3.0.0 |
 
 ### Modules
 
@@ -130,12 +130,12 @@ You need the following permissions to run this module:
 
 | Name | Type |
 |------|------|
-| [helm_release.data_source_connector](https://registry.terraform.io/providers/hashicorp/helm/3.1.0/docs/resources/release) | resource |
+| [helm_release.data_source_connector](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [ibm_backup_recovery_protection_policy.protection_policy](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/backup_recovery_protection_policy) | resource |
 | [ibm_backup_recovery_source_registration.source_registration](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/backup_recovery_source_registration) | resource |
-| [kubernetes_cluster_role_binding.brsagent_admin](https://registry.terraform.io/providers/hashicorp/kubernetes/2.38.0/docs/resources/cluster_role_binding) | resource |
-| [kubernetes_secret.brsagent_token](https://registry.terraform.io/providers/hashicorp/kubernetes/2.38.0/docs/resources/secret) | resource |
-| [kubernetes_service_account.brsagent](https://registry.terraform.io/providers/hashicorp/kubernetes/2.38.0/docs/resources/service_account) | resource |
+| [kubernetes_cluster_role_binding.brsagent_admin](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/cluster_role_binding) | resource |
+| [kubernetes_secret.brsagent_token](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) | resource |
+| [kubernetes_service_account.brsagent](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/service_account) | resource |
 | [ibm_container_vpc_cluster.cluster](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/data-sources/container_vpc_cluster) | data source |
 | [ibm_is_security_group.clustersg](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/data-sources/is_security_group) | data source |
 
@@ -144,7 +144,7 @@ You need the following permissions to run this module:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_add_dsc_rules_to_cluster_sg"></a> [add\_dsc\_rules\_to\_cluster\_sg](#input\_add\_dsc\_rules\_to\_cluster\_sg) | Set to `true` to automatically add required security group rules for the Data Source Connector and set to `false` to only register the cluster and create the policy. | `bool` | `true` | no |
-| <a name="input_brs_endpoint_type"></a> [brs\_endpoint\_type](#input\_brs\_endpoint\_type) | The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'. | `string` | `"public"` | no |
+| <a name="input_brs_endpoint_type"></a> [brs\_endpoint\_type](#input\_brs\_endpoint\_type) | The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'. | `string` | `"private"` | no |
 | <a name="input_brs_instance_guid"></a> [brs\_instance\_guid](#input\_brs\_instance\_guid) | GUID of the Backup & Recovery Service instance. | `string` | n/a | yes |
 | <a name="input_brs_instance_region"></a> [brs\_instance\_region](#input\_brs\_instance\_region) | Region of the Backup & Recovery Service instance. | `string` | n/a | yes |
 | <a name="input_brs_tenant_id"></a> [brs\_tenant\_id](#input\_brs\_tenant\_id) | BRS tenant ID in the format `<tenant-guid>/`. Required for API calls and agent configuration. | `string` | n/a | yes |
@@ -155,16 +155,17 @@ You need the following permissions to run this module:
 | <a name="input_dsc_chart"></a> [dsc\_chart](#input\_dsc\_chart) | Name of the Data Source connector Helm chart. | `string` | `"cohesity-dsc-chart"` | no |
 | <a name="input_dsc_chart_location"></a> [dsc\_chart\_location](#input\_dsc\_chart\_location) | OCI registry location of the Data Source Connector Helm chart. | `string` | `"oci://icr.io/ext/brs"` | no |
 | <a name="input_dsc_chart_version"></a> [dsc\_chart\_version](#input\_dsc\_chart\_version) | Version of the Data Source Connector Helm chart to deploy. | `string` | `"7.2.15-release-20250721-6aa24701"` | no |
-| <a name="input_dsc_image"></a> [dsc\_image](#input\_dsc\_image) | Container image for the Data Source Connector. | `string` | `"icr.io/ext/brs/cohesity-data-source-connector_7.2.15-release-20250721"` | no |
-| <a name="input_dsc_image_version_tag"></a> [dsc\_image\_version\_tag](#input\_dsc\_image\_version\_tag) | Image tag for the Data Source Connector container. | `string` | `"6aa24701"` | no |
+| <a name="input_dsc_image_version"></a> [dsc\_image\_version](#input\_dsc\_image\_version) | Container image for the Data Source Connector. | `string` | `"icr.io/ext/brs/cohesity-data-source-connector_7.2.15-release-20250721:6aa24701@sha256:e23ce2167e62395f2b01d77cf63fee497c5fe786f03c06a62b00313e465ef837"` | no |
 | <a name="input_dsc_name"></a> [dsc\_name](#input\_dsc\_name) | Release name for the Data Source Connector Helm deployment. | `string` | `"dsc"` | no |
 | <a name="input_dsc_namespace"></a> [dsc\_namespace](#input\_dsc\_namespace) | The cluster namespace where the Data Source Connector will be installed. Will be created if it does not exist. | `string` | `"data-source-connector"` | no |
 | <a name="input_dsc_registration_token"></a> [dsc\_registration\_token](#input\_dsc\_registration\_token) | Registration token generated in the Backup & Recovery Service UI when adding a cluster data source. | `string` | n/a | yes |
-| <a name="input_dsc_replicas"></a> [dsc\_replicas](#input\_dsc\_replicas) | Number of Data Source Connector pods to run (typically 1). | `number` | `1` | no |
-| <a name="input_kube_type"></a> [kube\_type](#input\_kube\_type) | Specify the type of target cluster for the backup and recovery. Accepted values are `ROKS` or `IKS`. | `string` | `"ROKS"` | no |
-| <a name="input_policy"></a> [policy](#input\_policy) | The backup schedule and retentions of a Protection Policy. | <pre>object({<br/>    name = string<br/>    schedule = object({<br/>      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs<br/>      frequency = number # required when unit is Minutes/Hours/Days<br/><br/>      # Optional extra layers (allowed even when unit = Minutes)<br/>      minute_schedule = optional(object({ frequency = number }))<br/>      hour_schedule   = optional(object({ frequency = number }))<br/>      day_schedule    = optional(object({ frequency = number }))<br/>      week_schedule   = optional(object({ day_of_week = list(string) }))<br/>      month_schedule = optional(object({<br/>        day_of_week   = optional(list(string))<br/>        week_of_month = optional(string) # First, Second, Third, Fourth, Last<br/>        day_of_month  = optional(number)<br/>      }))<br/>      year_schedule = optional(object({ day_of_year = string })) # First, Last<br/>    })<br/><br/>    retention = object({<br/>      duration = number<br/>      unit     = string # Days, Weeks, Months, Years<br/><br/>      data_lock_config = optional(object({<br/>        mode                           = string # Compliance, Administrative<br/>        unit                           = string # Days, Weeks, Months, Years<br/>        duration                       = number<br/>        enable_worm_on_external_target = optional(bool, false)<br/>      }))<br/>    })<br/><br/>    use_default_backup_target = optional(bool, true)<br/>  })</pre> | n/a | yes |
-| <a name="input_registration_images"></a> [registration\_images](#input\_registration\_images) | The images required for backup and recovery registration. | <pre>object({<br/>    data_mover              = optional(string, null)<br/>    velero                  = optional(string, null)<br/>    velero_aws_plugin       = optional(string, null)<br/>    velero_openshift_plugin = optional(string, null)<br/>    init_container          = optional(string, null)<br/>  })</pre> | `{}` | no |
+| <a name="input_dsc_replicas"></a> [dsc\_replicas](#input\_dsc\_replicas) | Number of Data Source Connector podsto run.<br/>Recommended values:<br/>  • 3 – for high availability across multiple nodes/zones (strongly recommended in production)<br/>  • 1 – only for dev/test or single-node clusters | `number` | `1` | no |
+| <a name="input_kube_type"></a> [kube\_type](#input\_kube\_type) | Specify the type of target cluster for the backup and recovery. Accepted values are `openshift` or `kubernetes`. | `string` | `"openshift"` | no |
+| <a name="input_policy"></a> [policy](#input\_policy) | The backup schedule and retentions of a Protection Policy. | <pre>object({<br/>    name = string<br/>    schedule = object({<br/>      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs<br/>      frequency = number # required when unit is Minutes/Hours/Days<br/><br/>      # Optional extra layers (allowed even when unit = Minutes)<br/>      minute_schedule = optional(object({ frequency = number }))<br/>      hour_schedule   = optional(object({ frequency = number }))<br/>      day_schedule    = optional(object({ frequency = number }))<br/>      week_schedule   = optional(object({ day_of_week = list(string) }))<br/>      month_schedule = optional(object({<br/>        day_of_week   = optional(list(string))<br/>        week_of_month = optional(string) # First, Second, Third, Fourth, Last<br/>        day_of_month  = optional(number)<br/>      }))<br/>      year_schedule = optional(object({ day_of_year = string })) # First, Last<br/>    })<br/><br/>    retention = object({<br/>      duration = number<br/>      unit     = string # Days, Weeks, Months, Years<br/><br/>      data_lock_config = optional(object({<br/>        mode                           = string # Compliance, Administrative<br/>        unit                           = string # Days, Weeks, Months, Years<br/>        duration                       = number<br/>        enable_worm_on_external_target = optional(bool, false)<br/>      }))<br/>    })<br/><br/>    use_default_backup_target = optional(bool, true)<br/>  })</pre> | <pre>{<br/>  "name": "default-policy",<br/>  "retention": {<br/>    "duration": 4,<br/>    "unit": "Weeks"<br/>  },<br/>  "schedule": {<br/>    "frequency": 6,<br/>    "unit": "Hours"<br/>  },<br/>  "use_default_backup_target": true<br/>}</pre> | no |
+| <a name="input_registration_images"></a> [registration\_images](#input\_registration\_images) | The images required for backup and recovery registration. | <pre>object({<br/>    data_mover              = string<br/>    velero                  = string<br/>    velero_aws_plugin       = string<br/>    velero_openshift_plugin = string<br/>    init_container          = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "data_mover": "icr.io/ext/brs/cohesity-datamover:7.2.15-p2@sha256:6d1c55ec9d3f4a08cab7595b3d70d489e53c8f5ca310c141da5068755a46a282",<br/>  "velero": "icr.io/ext/brs/velero:7.2.15-p2@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041",<br/>  "velero_aws_plugin": "icr.io/ext/brs/velero-plugin-for-aws:7.2.15-p2@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13",<br/>  "velero_openshift_plugin": "icr.io/ext/brs/velero-plugin-for-openshift:7.2.15-p2@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"<br/>}</pre> | no |
 | <a name="input_registration_name"></a> [registration\_name](#input\_registration\_name) | Name of the registration. | `string` | n/a | yes |
+| <a name="input_wait_till"></a> [wait\_till](#input\_wait\_till) | To avoid long wait times when you run your Terraform code, you can specify the stage when you want Terraform to mark the cluster resource creation as completed. Depending on what stage you choose, the cluster creation might not be fully completed and continues to run in the background. However, your Terraform code can continue to run without waiting for the cluster to be fully created. Supported args are `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` and `Normal` | `string` | `"Normal"` | no |
+| <a name="input_wait_till_timeout"></a> [wait\_till\_timeout](#input\_wait\_till\_timeout) | Timeout for wait\_till in minutes. | `number` | `90` | no |
 
 ### Outputs
 
