@@ -48,7 +48,7 @@ resource "ibm_is_subnet" "subnet_zone_1" {
 ########################################################################################################################
 
 locals {
-  cluster_vpc_subnets = {
+  cluster_vpc_subnets = var.cluster_name_id == null ? {
     default = [
       {
         id         = ibm_is_subnet.subnet_zone_1[0].id
@@ -56,7 +56,7 @@ locals {
         zone       = ibm_is_subnet.subnet_zone_1[0].zone
       }
     ]
-  }
+  } : null
 
   worker_pools = [
     {
