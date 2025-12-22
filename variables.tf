@@ -262,3 +262,9 @@ variable "enable_auto_protect" {
   description = "Set to `true` to enable auto-protect on the registered cluster with the specified protection policy."
   default     = false
 }
+
+variable "ibmcloud_api_key" {
+  type        = string
+  description = "The IBM Cloud platform API key needed to deploy IAM enabled resources."
+  sensitive   = true
+}
