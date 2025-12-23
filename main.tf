@@ -13,7 +13,7 @@ data "ibm_container_vpc_cluster" "cluster" {
 module "dsc_sg_rule" {
   count                        = var.add_dsc_rules_to_cluster_sg ? 1 : 0
   source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.8.0"
+  version                      = "v2.8.6"
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
@@ -83,7 +83,7 @@ resource "helm_release" "data_source_connector" {
   ]
 }
 
-resource "kubernetes_service_account" "brsagent" {
+resource "kubernetes_service_account_v1" "brsagent" {
   depends_on = [helm_release.data_source_connector]
   metadata {
     name      = "brsagent"
@@ -92,7 +92,7 @@ resource "kubernetes_service_account" "brsagent" {
 }
 
 # Create a cluster role binding for the service account
-resource "kubernetes_cluster_role_binding" "brsagent_admin" {
+resource "kubernetes_cluster_role_binding_v1" "brsagent_admin" {
   metadata {
     name = "brsagent-admin"
   }
@@ -103,18 +103,18 @@ resource "kubernetes_cluster_role_binding" "brsagent_admin" {
   }
   subject {
     kind      = "ServiceAccount"
-    name      = kubernetes_service_account.brsagent.metadata[0].name
+    name      = kubernetes_service_account_v1.brsagent.metadata[0].name
     namespace = var.dsc_namespace
   }
 }
 
 # Create a secret to store the service account token
-resource "kubernetes_secret" "brsagent_token" {
+resource "kubernetes_secret_v1" "brsagent_token" {
   metadata {
     name      = "brsagent-token"
     namespace = var.dsc_namespace
     annotations = {
-      "kubernetes.io/service-account.name" = kubernetes_service_account.brsagent.metadata[0].name
+      "kubernetes.io/service-account.name" = kubernetes_service_account_v1.brsagent.metadata[0].name
     }
   }
   type                           = "kubernetes.io/service-account-token"
@@ -122,7 +122,7 @@ resource "kubernetes_secret" "brsagent_token" {
 }
 
 resource "ibm_backup_recovery_source_registration" "source_registration" {
-  depends_on      = [kubernetes_secret.brsagent_token]
+  depends_on      = [kubernetes_secret_v1.brsagent_token]
   x_ibm_tenant_id = var.brs_tenant_id
   environment     = "kKubernetes"
   connection_id   = var.connection_id
@@ -136,7 +136,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
     velero_openshift_plugin_image_location = var.registration_images.velero_openshift_plugin
     init_container_image_location          = var.registration_images.init_container
     kubernetes_type                        = "kCluster"
-    client_private_key                     = chomp(kubernetes_secret.brsagent_token.data["token"])
+    client_private_key                     = chomp(kubernetes_secret_v1.brsagent_token.data["token"])
   }
   endpoint_type = var.brs_endpoint_type
   instance_id   = var.brs_instance_guid
