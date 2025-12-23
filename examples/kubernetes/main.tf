@@ -3,7 +3,7 @@
 ##############################################################################
 module "resource_group" {
   source                       = "terraform-ibm-modules/resource-group/ibm"
-  version                      = "1.4.0"
+  version                      = "1.4.6"
   resource_group_name          = var.resource_group == null ? "${var.prefix}-resource-group" : null
   existing_resource_group_name = var.resource_group
 }
@@ -87,7 +87,7 @@ resource "time_sleep" "wait_operators" {
 
 module "backup_recovery_instance" {
   source                = "terraform-ibm-modules/backup-recovery/ibm"
-  version               = "v1.1.0"
+  version               = "v1.1.8"
   region                = var.region
   resource_group_id     = module.resource_group.resource_group_id
   ibmcloud_api_key      = var.ibmcloud_api_key
