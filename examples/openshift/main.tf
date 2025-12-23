@@ -3,7 +3,7 @@
 ##############################################################################
 module "resource_group" {
   source                       = "terraform-ibm-modules/resource-group/ibm"
-  version                      = "1.4.6"
+  version                      = "1.4.7"
   resource_group_name          = var.resource_group == null ? "${var.prefix}-resource-group" : null
   existing_resource_group_name = var.resource_group
 }
@@ -72,7 +72,7 @@ locals {
 module "ocp_base" {
   count                = var.cluster_name_id == null ? 1 : 0
   source               = "terraform-ibm-modules/base-ocp-vpc/ibm"
-  version              = "3.75.3"
+  version              = "3.75.7"
   resource_group_id    = module.resource_group.resource_group_id
   region               = var.region
   tags                 = var.resource_tags
@@ -110,7 +110,7 @@ resource "time_sleep" "wait_operators" {
 
 module "backup_recovery_instance" {
   source                = "terraform-ibm-modules/backup-recovery/ibm"
-  version               = "v1.1.8"
+  version               = "v1.1.10"
   region                = var.region
   resource_group_id     = module.resource_group.resource_group_id
   ibmcloud_api_key      = var.ibmcloud_api_key

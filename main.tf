@@ -13,7 +13,7 @@ data "ibm_container_vpc_cluster" "cluster" {
 module "dsc_sg_rule" {
   count                        = var.add_dsc_rules_to_cluster_sg ? 1 : 0
   source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.8.6"
+  version                      = "v2.8.8"
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
