@@ -265,6 +265,6 @@ variable "enable_auto_protect" {
 
 variable "ibmcloud_api_key" {
   type        = string
-  description = "The IBM Cloud platform API key needed to deploy IAM enabled resources."
+  description = "The IBM Cloud api key to generate an IAM token."
   sensitive   = true
 }
