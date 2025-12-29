@@ -68,6 +68,7 @@ resource "helm_release" "data_source_connector" {
   timeout          = 1500
   wait             = true
   atomic           = true
+  upgrade_install  = true
   values = [
     yamlencode({
       secrets = {
