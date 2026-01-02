@@ -104,7 +104,7 @@ module "backup_recovery_instance" {
 ########################################################################################################################
 
 
-module "backup_recover_protect_ocp" {
+module "backup_recover_protect_iks" {
   source                       = "../.."
   cluster_id                   = data.ibm_container_vpc_cluster.cluster.id
   cluster_resource_group_id    = module.resource_group.resource_group_id
