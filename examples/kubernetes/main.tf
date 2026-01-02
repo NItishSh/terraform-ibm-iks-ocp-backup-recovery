@@ -111,7 +111,7 @@ module "backup_recover_protect_ocp" {
   cluster_config_endpoint_type = "private"
   add_dsc_rules_to_cluster_sg  = false
   dsc_registration_token       = module.backup_recovery_instance.registration_token
-  enable_auto_protect          = false
+  enable_auto_protect          = true
   kube_type                    = "kubernetes"
   connection_id                = module.backup_recovery_instance.connection_id
   ibmcloud_api_key             = var.ibmcloud_api_key
