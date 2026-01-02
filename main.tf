@@ -198,7 +198,7 @@ locals {
   ) : ""
 }
 
-# when auto-protect is enabled fot the registration, it created a protection group that is currently not deletable via terraform
+# when auto-protect is enabled for the registration, it created a protection group that is currently not deletable via terraform
 # this resource uses a local-exec provisioner to call a script that deletes the protection group
 resource "terraform_data" "delete_auto_protect_pg" {
   count = var.enable_auto_protect ? 1 : 0
