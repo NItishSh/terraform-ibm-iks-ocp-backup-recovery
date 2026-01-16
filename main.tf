@@ -57,20 +57,31 @@ module "dsc_sg_rule" {
   ]
 }
 
+locals {
+  uri_no_digest      = split("@", var.dsc_chart_uri)[0]
+  chart_with_version = element(split("/", local.uri_no_digest), -1)
+
+  dsc_chart          = split(":", local.chart_with_version)[0]
+  dsc_chart_version  = replace(local.chart_with_version, "${local.dsc_chart}:", "")
+  dsc_chart_location = replace(local.uri_no_digest, "/${local.chart_with_version}", "")
+}
+
 resource "helm_release" "data_source_connector" {
   depends_on       = [module.dsc_sg_rule]
   name             = var.dsc_name
-  chart            = var.dsc_chart
-  repository       = var.dsc_chart_location
+  chart            = local.dsc_chart
+  repository       = local.dsc_chart_location
   namespace        = var.dsc_namespace
-  version          = var.dsc_chart_version
+  version          = local.dsc_chart_version
   create_namespace = true
   timeout          = 1500
   wait             = true
+  atomic           = true
+  upgrade_install  = true
   values = [
     yamlencode({
       secrets = {
-        registrationToken = var.dsc_registration_token
+        registrationToken = local.registration_token
       }
       image = {
         namespace  = element(split("/", var.dsc_image_version), 1)
@@ -121,15 +132,81 @@ resource "kubernetes_secret_v1" "brsagent_token" {
   wait_for_service_account_token = true
 }
 
+locals {
+  use_existing_policy = contains(["Gold", "Silver", "Bronze"], var.policy.name)
+
+  # Only resolve policy_id if auto-protect is enabled
+  policy_id = var.enable_auto_protect ? (
+    local.use_existing_policy ? (
+      data.ibm_backup_recovery_protection_policies.existing_policies[0].policies[0].id
+      ) : (
+      replace(ibm_backup_recovery_protection_policy.protection_policy[0].id, "${local.brs_tenant_id}::", "")
+    )
+  ) : null
+}
+
+data "ibm_resource_instance" "backup_recovery_instance" {
+  identifier = local.brs_instance_guid
+}
+data "ibm_backup_recovery_data_source_connections" "connections" {
+  x_ibm_tenant_id  = local.brs_tenant_id
+  connection_names = [var.brs_connection_name]
+  endpoint_type    = var.brs_endpoint_type
+  instance_id      = local.brs_instance_guid
+  region           = local.brs_instance_region
+}
+locals {
+  brs_tenant_id                        = "${data.ibm_resource_instance.backup_recovery_instance.extensions.tenant-id}/"
+  connection_id                        = data.ibm_backup_recovery_data_source_connections.connections.connections[0].connection_id
+  registration_token                   = ibm_backup_recovery_connection_registration_token.registration_token.registration_token
+  backup_recovery_instance_public_url  = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.public"]
+  backup_recovery_instance_private_url = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.private"]
+  brs_instance_guid                    = element(split(":", var.brs_instance_crn), 7)
+  brs_instance_region                  = element(split(":", var.brs_instance_crn), 5)
+}
+resource "time_rotating" "token_rotation" {
+  rotation_days = 1
+}
+
+resource "ibm_backup_recovery_connection_registration_token" "registration_token" {
+  connection_id   = local.connection_id
+  x_ibm_tenant_id = local.brs_tenant_id
+  endpoint_type   = var.brs_endpoint_type
+  instance_id     = local.brs_instance_guid
+  region          = local.brs_instance_region
+
+  # This forces a replacement every time the time_rotating resource rotates
+  lifecycle {
+    replace_triggered_by = [
+      time_rotating.token_rotation
+    ]
+  }
+}
+data "ibm_backup_recovery_protection_policies" "existing_policies" {
+  count           = local.use_existing_policy ? 1 : 0
+  x_ibm_tenant_id = local.brs_tenant_id
+  instance_id     = local.brs_instance_guid
+  region          = local.brs_instance_region
+  endpoint_type   = var.brs_endpoint_type
+  policy_names    = [var.policy.name]
+}
+
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   depends_on      = [kubernetes_secret_v1.brsagent_token]
-  x_ibm_tenant_id = var.brs_tenant_id
+  x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
-  connection_id   = var.connection_id
+  connection_id   = local.connection_id
   name            = var.registration_name
   kubernetes_params {
-    endpoint                               = var.cluster_config_endpoint_type == "private" && data.ibm_container_vpc_cluster.cluster.private_service_endpoint ? data.ibm_container_vpc_cluster.cluster.private_service_endpoint_url : data.ibm_container_vpc_cluster.cluster.public_service_endpoint_url
-    kubernetes_distribution                = var.kube_type == "openshift" ? "kROKS" : "kIKS"
+    endpoint                = var.cluster_config_endpoint_type == "private" && data.ibm_container_vpc_cluster.cluster.private_service_endpoint ? data.ibm_container_vpc_cluster.cluster.private_service_endpoint_url : data.ibm_container_vpc_cluster.cluster.public_service_endpoint_url
+    kubernetes_distribution = var.kube_type == "openshift" ? "kROKS" : "kIKS"
+    dynamic "auto_protect_config" {
+      for_each = var.enable_auto_protect ? [1] : []
+      content {
+        is_default_auto_protected = true
+        policy_id                 = local.policy_id
+      }
+    }
     data_mover_image_location              = var.registration_images.data_mover
     velero_image_location                  = var.registration_images.velero
     velero_aws_plugin_image_location       = var.registration_images.velero_aws_plugin
@@ -139,16 +216,55 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
     client_private_key                     = chomp(kubernetes_secret_v1.brsagent_token.data["token"])
   }
   endpoint_type = var.brs_endpoint_type
-  instance_id   = var.brs_instance_guid
-  region        = var.brs_instance_region
+  instance_id   = local.brs_instance_guid
+  region        = local.brs_instance_region
+}
+
+
+locals {
+  backup_recovery_instance_url = var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url : local.backup_recovery_instance_private_url
+}
+
+# when auto-protect is enabled for the registration, it created a protection group that is currently not deletable via terraform
+# this resource uses a local-exec provisioner to call a script that deletes the protection group
+resource "terraform_data" "delete_auto_protect_pg" {
+  count = var.enable_auto_protect ? 1 : 0
+
+  input = {
+    url                 = local.backup_recovery_instance_url
+    tenant              = local.brs_tenant_id
+    endpoint_type       = var.brs_endpoint_type
+    protection_group_id = ibm_backup_recovery_source_registration.source_registration.kubernetes_params[0].auto_protect_config[0].protection_group_id
+    registration_id     = replace(ibm_backup_recovery_source_registration.source_registration.id, "${local.brs_tenant_id}::", "")
+    api_key             = sensitive(var.ibmcloud_api_key)
+  }
+
+  triggers_replace = {
+    api_key = sensitive(var.ibmcloud_api_key)
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    command     = "${path.module}/scripts/delete_auto_protect_pg.sh https://${self.input.url} ${self.input.tenant} ${self.input.endpoint_type} ${self.input.protection_group_id} ${self.input.registration_id}"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      API_KEY = self.triggers_replace.api_key
+    }
+  }
+}
+
+moved {
+  from = ibm_backup_recovery_protection_policy.protection_policy
+  to   = ibm_backup_recovery_protection_policy.protection_policy[0]
 }
 
 resource "ibm_backup_recovery_protection_policy" "protection_policy" {
-  x_ibm_tenant_id = var.brs_tenant_id
+  count           = local.use_existing_policy ? 0 : 1
+  x_ibm_tenant_id = local.brs_tenant_id
   name            = var.policy.name
   endpoint_type   = var.brs_endpoint_type
-  instance_id     = var.brs_instance_guid
-  region          = var.brs_instance_region
+  instance_id     = local.brs_instance_guid
+  region          = local.brs_instance_region
   backup_policy {
     regular {
       incremental {
@@ -248,7 +364,7 @@ resource "ibm_backup_recovery_protection_policy" "protection_policy" {
   # RETRY OPTIONS
   # ================================
   retry_options {
-    retries             = 1
+    retries             = 3
     retry_interval_mins = 5
   }
 }

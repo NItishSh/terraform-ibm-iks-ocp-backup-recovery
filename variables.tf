@@ -69,24 +69,10 @@ variable "add_dsc_rules_to_cluster_sg" {
   default     = true
 }
 
-variable "dsc_chart" {
-  description = "Name of the Data Source connector Helm chart."
+variable "dsc_chart_uri" {
+  description = "The full OCI registry URI for the Data Source Connector Helm chart, including the digest."
   type        = string
-  default     = "cohesity-dsc-chart"
-  nullable    = false
-}
-
-variable "dsc_chart_location" {
-  description = "OCI registry location of the Data Source Connector Helm chart."
-  type        = string
-  default     = "oci://icr.io/ext/brs"
-  nullable    = false
-}
-
-variable "dsc_chart_version" {
-  description = "Version of the Data Source Connector Helm chart to deploy."
-  type        = string
-  default     = "7.2.16-release-20251014-fbc7ff85"
+  default     = "oci://icr.io/ext/brs/cohesity-dsc-chart:7.2.16-release-20251014-fbc7ff85@sha256:69114edaeb80198684040ca9c014b57fd2993f45e07dfeffd64fd5ee28165cd2"
   nullable    = false
 }
 
@@ -127,37 +113,11 @@ variable "dsc_namespace" {
   nullable    = false
 }
 
-variable "dsc_registration_token" {
-  type        = string
-  description = "Registration token generated in the Backup & Recovery Service UI when adding a cluster data source."
-  sensitive   = true
-  nullable    = false
-}
+
 
 ##############################################################################
 # Backup Recovery Service Instance
 ##############################################################################
-
-variable "connection_id" {
-  type        = string
-  description = "Connection ID for the backup service"
-}
-
-variable "brs_instance_guid" {
-  type        = string
-  description = "GUID of the Backup & Recovery Service instance."
-  nullable    = false
-}
-
-variable "brs_instance_region" {
-  type        = string
-  description = "Region of the Backup & Recovery Service instance."
-  nullable    = false
-  validation {
-    condition     = contains(["us-east"], var.brs_instance_region)
-    error_message = "Kubernetes & Opernshift backup recovery is only supported in these regions: \"us-east\"."
-  }
-}
 
 variable "brs_endpoint_type" {
   type        = string
@@ -168,12 +128,6 @@ variable "brs_endpoint_type" {
     condition     = contains(["public", "private"], var.brs_endpoint_type)
     error_message = "`endpoint_type` must be 'public' or 'private'."
   }
-}
-
-variable "brs_tenant_id" {
-  type        = string
-  description = "BRS tenant ID in the format `<tenant-guid>/`. Required for API calls and agent configuration."
-  nullable    = false
 }
 
 variable "registration_name" {
@@ -203,7 +157,7 @@ variable "registration_images" {
 variable "policy" {
   type = object({
     name = string
-    schedule = object({
+    schedule = optional(object({
       unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs
       frequency = number # required when unit is Minutes/Hours/Days
 
@@ -218,9 +172,9 @@ variable "policy" {
         day_of_month  = optional(number)
       }))
       year_schedule = optional(object({ day_of_year = string })) # First, Last
-    })
+    }))
 
-    retention = object({
+    retention = optional(object({
       duration = number
       unit     = string # Days, Weeks, Months, Years
 
@@ -230,7 +184,7 @@ variable "policy" {
         duration                       = number
         enable_worm_on_external_target = optional(bool, false)
       }))
-    })
+    }))
 
     use_default_backup_target = optional(bool, true)
   })
@@ -246,6 +200,37 @@ variable "policy" {
     }
     use_default_backup_target = true
   }
-
+  validation {
+    condition = contains(["Gold", "Silver", "Bronze"], var.policy.name) ? (
+      var.policy.schedule == null && var.policy.retention == null
+      ) : (
+      var.policy.schedule != null && var.policy.retention != null
+    )
+    error_message = "If using built-in policies (Gold, Silver, Bronze), do not provide schedule or retention. For custom policies, both are required."
+  }
   description = "The backup schedule and retentions of a Protection Policy."
+}
+
+variable "enable_auto_protect" {
+  type        = bool
+  description = "Enable auto-protect during the initial cluster registration. This must be set to `true` on the first run; toggling it from `false` to `true` later is not supported by the underlying API and will not retroactively create the protection group."
+  default     = true
+}
+
+variable "ibmcloud_api_key" {
+  type        = string
+  description = "The IBM Cloud api key to generate an IAM token."
+  sensitive   = true
+}
+
+variable "brs_connection_name" {
+  type        = string
+  description = "Name of the connection from the Backup & Recovery Service instance."
+  nullable    = false
+}
+
+variable "brs_instance_crn" {
+  type        = string
+  description = "CRN of the Backup & Recovery Service instance."
+  nullable    = false
 }
