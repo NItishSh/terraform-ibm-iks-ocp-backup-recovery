@@ -1,0 +1,243 @@
+{
+  "products": [
+    {
+      "name": "deploy-arch-ibm-iks-ocp-backup-recovery",
+      "label": "Backup and Recovery automation for IKS and OpenShift",
+      "product_kind": "solution",
+      "tags": [
+        "ibm_created",
+        "target_terraform",
+        "terraform",
+        "solution",
+        "containers",
+        "storage_backup",
+        "target_roks",
+        "platform_engineering"
+      ],
+      "keywords": [
+        "openshift",
+        "backup",
+        "recovery",
+        "data protection",
+        "cluster",
+        "IaC",
+        "infrastructure as code",
+        "terraform",
+        "solution",
+        "ibm backup and recovery"
+      ],
+      "short_description": "Enables enterprise-grade backup and recovery for existing IKS and Red Hat OpenShift clusters on IBM Cloud using IBM Backup & Recovery Service with a fully configurable option.",
+      "long_description": "This solution integrates IBM Backup & Recovery Service with existing Red Hat OpenShift on IBM Cloud clusters. It automates the deployment of the Data Source Connector (DSC), cluster registration, security group rules, and protection policies to safeguard namespaces, persistent volumes, and other cluster resources.\n\nThe **fully configurable option** is available, designed for production-grade deployments that require fine-grained control and customization. It leverages reusable Terraform IBM Modules to ensure consistency, best practices, and maintainability.\n\nYou can further extend this architecture by incorporating additional Terraform IBM Modules (https://github.com/terraform-ibm-modules) to add observability, enhanced security, compliance features, or other capabilities as needed.",
+      "offering_docs_url": "https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks",
+      "offering_icon_url": "https://raw.githubusercontent.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/main/images/backup-recovery-icon.svg",
+      "provider_name": "IBM",
+      "features": [
+        {
+          "title": "Red Hat OpenShift Backup and Recovery Integration",
+          "description": "Automates the deployment of IBM Backup & Recovery Service integration for existing Red Hat OpenShift clusters on IBM Cloud. This includes deploying the Data Source Connector (DSC) via Helm, creating necessary Kubernetes resources, configuring outbound security group rules, registering the cluster, and applying a customizable protection policy. [Learn more](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks)."
+        }
+      ],
+      "support_details": "This product is in the community registry. As such support is handled through the originated repo. If you experience issues, please open an issue in the repository [here](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/issues). Please note this product is not supported via the IBM Cloud Support Center.",
+      "flavors": [
+        {
+          "label": "Fully configurable",
+          "name": "fully-configurable",
+          "index": 1,
+          "install_type": "fullstack",
+          "short_description": "Ideal for users who want flexibility with a reliable starting point.",
+          "working_directory": "solutions/fully-configurable",
+          "release_notes_url": "https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/releases",
+          "iam_permissions": [
+            {
+              "role_crns": [
+                "crn:v1:bluemix:public:iam::::role:Editor"
+              ],
+              "service_name": "containers-kubernetes",
+              "notes": "Required to deploy helm charts and manage Kubernetes resources on IKS and Red Hat OpenShift clusters."
+            },
+            {
+              "role_crns": [
+                "crn:v1:bluemix:public:iam::::role:Editor"
+              ],
+              "service_name": "is.vpc",
+              "notes": "Required for creating Security group rules in Virtual Private Cloud(VPC)."
+            },
+            {
+              "role_crns": [
+                "crn:v1:bluemix:public:iam::::role:Editor"
+              ],
+              "service_name": "backup-recovery",
+              "notes": "Required to create and manage Backup and Recovery policy, source registration and protection group."
+            }
+          ],
+          "architecture": {
+            "features": [
+              {
+                "title": " ",
+                "description": "Configured to use IBM secure-by-default standards, but can be edited to fit your use case."
+              }
+            ],
+            "diagrams": [
+              {
+                "diagram": {
+                  "caption": "Red Hat OpenShift cluster with Backup and Recovery for IBM Cloud",
+                  "url": "https://raw.githubusercontent.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/main/reference-architectures/architecture_diagram.svg",
+                  "type": "image/svg+xml"
+                },
+                "description": "This architecture integrates an existing <b>Red Hat OpenShift cluster</b> with <b>IBM Backup & Recovery Service</b>. The solution deploys the <b>Data Source Connector (DSC)</b> via Helm, creates necessary Kubernetes resources, optionally configures outbound security group rules, registers the cluster, and applies a fully customizable protection policy.<br><br>Backups are stored in IBM Cloud Object Storage (managed by the Backup & Recovery instance) with options for immutable storage (WORM) to meet compliance requirements. This enables reliable point-in-time recovery of applications, data, and cluster configurations."
+              }
+            ]
+          },
+          "configuration": [
+            {
+              "key": "ibmcloud_api_key",
+              "required": true
+            },
+            {
+              "key": "cluster_id",
+              "display_name": "cluster",
+              "custom_config": {
+                "type": "cluster_var",
+                "grouping": "deployment",
+                "original_grouping": "deployment"
+              },
+              "required": true
+            },
+            {
+              "key": "cluster_resource_group_id",
+              "required": true,
+              "display_name": "cluster_resource_group",
+              "custom_config": {
+                "type": "resource_group",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "identifier": "rg_id"
+                }
+              }
+            },
+            {
+              "key": "cluster_config_endpoint_type",
+              "options": [
+                {
+                  "displayname": "Default",
+                  "value": "default"
+                },
+                {
+                  "displayname": "Private",
+                  "value": "private"
+                },
+                {
+                  "displayname": "VPE",
+                  "value": "vpe"
+                },
+                {
+                  "displayname": "Link",
+                  "value": "link"
+                }
+              ]
+            },
+            {
+              "key": "wait_till",
+              "options": [
+                {
+                  "displayname": "Master Node Ready",
+                  "value": "MasterNodeReady"
+                },
+                {
+                  "displayname": "One Worker Node Ready",
+                  "value": "OneWorkerNodeReady"
+                },
+                {
+                  "displayname": "Ingress Ready",
+                  "value": "IngressReady"
+                },
+                {
+                  "displayname": "Normal",
+                  "value": "Normal"
+                }
+              ]
+            },
+            {
+              "key": "wait_till_timeout"
+            },
+            {
+              "key": "policy",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "dsc_chart_uri"
+            },
+            {
+              "key": "enable_auto_protect"
+            },
+            {
+              "key": "dsc_namespace"
+            },
+            {
+              "key": "dsc_name"
+            },
+            {
+              "key": "dsc_replicas"
+            },
+            {
+              "key": "dsc_image_version"
+            },
+            {
+              "key": "brs_connection_name"
+            },
+            {
+              "key": "brs_instance_crn",
+              "type": "string",
+              "custom_config": {
+                "type": "platform_resource",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "resourceType": "backup-recovery",
+                  "selection": "single_select",
+                  "valueType": "crn"
+                }
+              }
+            },
+            {
+              "key": "add_dsc_rules_to_cluster_sg"
+            },
+            {
+              "key": "brs_endpoint_type"
+            },
+            {
+              "key": "registration_name"
+            },
+            {
+              "key": "registration_images",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            }
+          ],
+          "dependencies": [],
+          "dependency_version_2": true,
+          "terraform_version": "1.12.2",
+          "ignore_readme": true
+        }
+      ]
+    }
+  ]
+}

@@ -101,14 +101,10 @@ You need the following permissions to run this module:
 
 - **Backup & Recovery** service
   - `Editor` platform access
-  - `Manager` service access
-- **Cloud Object Storage**
-  - `Writer` service access (if using COS as backup target)
 - **VPC Infrastructure**
   - `Editor` on security groups (for DSC outbound rules)
 - **Kubernetes Service**
-  - `Viewer` platform access
-  - `Administrator` service access
+  - `Editor` platform access
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ### Requirements
@@ -151,7 +147,7 @@ You need the following permissions to run this module:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_add_dsc_rules_to_cluster_sg"></a> [add\_dsc\_rules\_to\_cluster\_sg](#input\_add\_dsc\_rules\_to\_cluster\_sg) | Set to `true` to automatically add required security group rules for the Data Source Connector and set to `false` to only register the cluster and create the policy. | `bool` | `true` | no |
-| <a name="input_brs_connection_name"></a> [brs\_connection\_name](#input\_brs\_connection\_name) | Name of the connection from the Backup & Recovery Service instance. | `string` | n/a | yes |
+| <a name="input_brs_connection_name"></a> [brs\_connection\_name](#input\_brs\_connection\_name) | Name of the existing connection from the Backup & Recovery Service instance to be used for protecting the cluster. | `string` | n/a | yes |
 | <a name="input_brs_endpoint_type"></a> [brs\_endpoint\_type](#input\_brs\_endpoint\_type) | The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'. | `string` | `"private"` | no |
 | <a name="input_brs_instance_crn"></a> [brs\_instance\_crn](#input\_brs\_instance\_crn) | CRN of the Backup & Recovery Service instance. | `string` | n/a | yes |
 | <a name="input_cluster_config_endpoint_type"></a> [cluster\_config\_endpoint\_type](#input\_cluster\_config\_endpoint\_type) | The type of endpoint to use for the cluster config access: `default`, `private`, `vpe`, or `link`. The `default` value uses the default endpoint of the cluster. | `string` | `"default"` | no |
@@ -167,7 +163,7 @@ You need the following permissions to run this module:
 | <a name="input_kube_type"></a> [kube\_type](#input\_kube\_type) | Specify the type of target cluster for the backup and recovery. Accepted values are `openshift` or `kubernetes`. | `string` | `"openshift"` | no |
 | <a name="input_policy"></a> [policy](#input\_policy) | The backup schedule and retentions of a Protection Policy. | <pre>object({<br/>    name = string<br/>    schedule = optional(object({<br/>      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs<br/>      frequency = number # required when unit is Minutes/Hours/Days<br/><br/>      # Optional extra layers (allowed even when unit = Minutes)<br/>      minute_schedule = optional(object({ frequency = number }))<br/>      hour_schedule   = optional(object({ frequency = number }))<br/>      day_schedule    = optional(object({ frequency = number }))<br/>      week_schedule   = optional(object({ day_of_week = list(string) }))<br/>      month_schedule = optional(object({<br/>        day_of_week   = optional(list(string))<br/>        week_of_month = optional(string) # First, Second, Third, Fourth, Last<br/>        day_of_month  = optional(number)<br/>      }))<br/>      year_schedule = optional(object({ day_of_year = string })) # First, Last<br/>    }))<br/><br/>    retention = optional(object({<br/>      duration = number<br/>      unit     = string # Days, Weeks, Months, Years<br/><br/>      data_lock_config = optional(object({<br/>        mode                           = string # Compliance, Administrative<br/>        unit                           = string # Days, Weeks, Months, Years<br/>        duration                       = number<br/>        enable_worm_on_external_target = optional(bool, false)<br/>      }))<br/>    }))<br/><br/>    use_default_backup_target = optional(bool, true)<br/>  })</pre> | <pre>{<br/>  "name": "default-policy",<br/>  "retention": {<br/>    "duration": 4,<br/>    "unit": "Weeks"<br/>  },<br/>  "schedule": {<br/>    "frequency": 6,<br/>    "unit": "Hours"<br/>  },<br/>  "use_default_backup_target": true<br/>}</pre> | no |
 | <a name="input_registration_images"></a> [registration\_images](#input\_registration\_images) | The images required for backup and recovery registration. | <pre>object({<br/>    data_mover              = string<br/>    velero                  = string<br/>    velero_aws_plugin       = string<br/>    velero_openshift_plugin = string<br/>    init_container          = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "data_mover": "icr.io/ext/brs/cohesity-datamover:7.2.16@sha256:f7fa1cfbb74e469117d553c02deedf6f4a35b3a61647028a9424be346fc3eb09",<br/>  "velero": "icr.io/ext/brs/velero:7.2.16@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041",<br/>  "velero_aws_plugin": "icr.io/ext/brs/velero-plugin-for-aws:7.2.16@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13",<br/>  "velero_openshift_plugin": "icr.io/ext/brs/velero-plugin-for-openshift:7.2.16@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"<br/>}</pre> | no |
-| <a name="input_registration_name"></a> [registration\_name](#input\_registration\_name) | Name of the registration. | `string` | n/a | yes |
+| <a name="input_registration_name"></a> [registration\_name](#input\_registration\_name) | Name of the new registration for the cluster in Backup & Recovery Service. this must be unique within the Backup & Recovery Service instance. Usually set to the cluster name for easy identification. | `string` | n/a | yes |
 | <a name="input_wait_till"></a> [wait\_till](#input\_wait\_till) | To avoid long wait times when you run your Terraform code, you can specify the stage when you want Terraform to mark the cluster resource creation as completed. Depending on what stage you choose, the cluster creation might not be fully completed and continues to run in the background. However, your Terraform code can continue to run without waiting for the cluster to be fully created. Supported args are `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` and `Normal` | `string` | `"Normal"` | no |
 | <a name="input_wait_till_timeout"></a> [wait\_till\_timeout](#input\_wait\_till\_timeout) | Timeout for wait\_till in minutes. | `number` | `90` | no |
 

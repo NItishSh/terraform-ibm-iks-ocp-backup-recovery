@@ -1,2 +1,4 @@
 # Primary owner should be listed first in list of global owners, followed by any secondary owners
-*       @Aashiq-J @iamar7 @NItishSh
+*       @Aashiq-J @iamar7
+ibm_catalog.json @NItishSh @SangeetManghnani
+solutions/fully-configurable/ @NItishSh @SangeetManghnani
