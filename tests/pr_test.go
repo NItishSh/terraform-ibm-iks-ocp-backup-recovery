@@ -102,8 +102,9 @@ func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Op
 	existingTerraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: tempTerraformDir,
 		Vars: map[string]interface{}{
-			"prefix": prefix,
-			"region": region,
+			"prefix":         prefix,
+			"region":         region,
+			"resource_group": resourceGroup,
 		},
 		// Set Upgrade to true to ensure latest version of providers and modules are used by terratest.
 		// This is the same as setting the -upgrade=true flag with terraform.
@@ -155,7 +156,8 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
 		{Name: "brs_instance_crn", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_crn"), DataType: "string"},
 		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
-		{Name: "registration_name", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
+		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
+		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
@@ -190,7 +192,8 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
 		{Name: "brs_instance_crn", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_crn"), DataType: "string"},
 		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
-		{Name: "registration_name", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
+		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
+		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 	}
 

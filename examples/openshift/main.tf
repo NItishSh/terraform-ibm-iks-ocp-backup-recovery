@@ -141,7 +141,6 @@ module "backup_recover_protect_ocp" {
   brs_endpoint_type   = "public"
   brs_instance_crn    = module.backup_recovery_instance.brs_instance_crn
   brs_connection_name = module.backup_recovery_instance.connection_name
-  registration_name   = var.cluster_name_id == null ? module.ocp_base[0].cluster_name : data.ibm_container_vpc_cluster.cluster[0].name
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"

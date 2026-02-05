@@ -16,16 +16,14 @@ module "protect_cluster" {
   source                       = "../.."
   cluster_id                   = var.cluster_id
   cluster_resource_group_id    = var.cluster_resource_group_id
-  cluster_config_endpoint_type = "private"
+  cluster_config_endpoint_type = var.cluster_config_endpoint_type
   add_dsc_rules_to_cluster_sg  = var.add_dsc_rules_to_cluster_sg
-  kube_type                    = "openshift"
+  kube_type                    = var.kube_type
   ibmcloud_api_key             = var.ibmcloud_api_key
   # --- BRS Instance Details---
   brs_endpoint_type   = var.brs_endpoint_type
   brs_instance_crn    = var.brs_instance_crn
   brs_connection_name = var.brs_connection_name
-  # --- Registration Details ---
-  registration_name = var.registration_name
   # --- Backup Policy ---
   policy            = var.policy
   wait_till         = var.wait_till
@@ -36,6 +34,7 @@ module "protect_cluster" {
   dsc_name          = var.dsc_name
   dsc_replicas      = var.dsc_replicas
   dsc_namespace     = var.dsc_namespace
+  dsc_helm_timeout  = var.dsc_helm_timeout
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect

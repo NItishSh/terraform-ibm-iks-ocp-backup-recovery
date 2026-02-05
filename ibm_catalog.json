@@ -106,7 +106,7 @@
             {
               "key": "cluster_resource_group_id",
               "required": true,
-              "display_name": "cluster_resource_group",
+              "display_name": "Cluster Resource Group",
               "custom_config": {
                 "type": "resource_group",
                 "grouping": "deployment",
@@ -139,6 +139,7 @@
             },
             {
               "key": "wait_till",
+              "display_name": "Wait Until Stage",
               "options": [
                 {
                   "displayname": "Master Node Ready",
@@ -159,7 +160,8 @@
               ]
             },
             {
-              "key": "wait_till_timeout"
+              "key": "wait_till_timeout",
+              "display_name": "Wait Timeout (Minutes)"
             },
             {
               "key": "policy",
@@ -175,28 +177,36 @@
               }
             },
             {
-              "key": "dsc_chart_uri"
+              "key": "dsc_chart_uri",
+              "display_name": "DSC Helm Chart URI"
             },
             {
-              "key": "enable_auto_protect"
+              "key": "enable_auto_protect",
+              "display_name": "Enable Auto-Protect"
             },
             {
-              "key": "dsc_namespace"
+              "key": "dsc_namespace",
+              "display_name": "DSC Namespace"
             },
             {
-              "key": "dsc_name"
+              "key": "dsc_name",
+              "display_name": "DSC Release Name"
             },
             {
-              "key": "dsc_replicas"
+              "key": "dsc_replicas",
+              "display_name": "DSC Replicas"
             },
             {
-              "key": "dsc_image_version"
+              "key": "dsc_image_version",
+              "display_name": "DSC Image Version"
             },
             {
-              "key": "brs_connection_name"
+              "key": "brs_connection_name",
+              "display_name": "Backup Recovery Service Connection Name"
             },
             {
               "key": "brs_instance_crn",
+              "display_name": "Backup Recovery Service Instance",
               "type": "string",
               "custom_config": {
                 "type": "platform_resource",
@@ -210,16 +220,41 @@
               }
             },
             {
-              "key": "add_dsc_rules_to_cluster_sg"
+              "key": "add_dsc_rules_to_cluster_sg",
+              "display_name": "Add Security Group Rules"
             },
             {
-              "key": "brs_endpoint_type"
+              "key": "brs_endpoint_type",
+              "display_name": "Backup Recovery Service Endpoint Type",
+              "options": [
+                {
+                  "displayname": "Private",
+                  "value": "private"
+                },
+                {
+                  "displayname": "Public",
+                  "value": "public"
+                }
+              ]
             },
             {
-              "key": "registration_name"
+              "key": "kube_type",
+              "required": true,
+              "display_name": "Cluster Type",
+              "options": [
+                {
+                  "displayname": "Kubernetes",
+                  "value": "kubernetes"
+                },
+                {
+                  "displayname": "OpenShift",
+                  "value": "openshift"
+                }
+              ]
             },
             {
               "key": "registration_images",
+              "display_name": "Registration Images",
               "custom_config": {
                 "type": "code_editor",
                 "grouping": "deployment",
@@ -230,6 +265,10 @@
                   ]
                 }
               }
+            },
+            {
+              "key": "dsc_helm_timeout",
+              "display_name": "Helm Timeout (Seconds)"
             }
           ],
           "dependencies": [],

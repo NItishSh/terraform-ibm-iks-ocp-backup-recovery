@@ -74,7 +74,7 @@ resource "helm_release" "data_source_connector" {
   namespace        = var.dsc_namespace
   version          = local.dsc_chart_version
   create_namespace = true
-  timeout          = 1500
+  timeout          = var.dsc_helm_timeout
   wait             = true
   atomic           = true
   upgrade_install  = true
@@ -203,7 +203,6 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
   connection_id   = local.connection_id
-  name            = var.registration_name
   kubernetes_params {
     endpoint                = var.cluster_config_endpoint_type == "private" && data.ibm_container_vpc_cluster.cluster.private_service_endpoint ? data.ibm_container_vpc_cluster.cluster.private_service_endpoint_url : data.ibm_container_vpc_cluster.cluster.public_service_endpoint_url
     kubernetes_distribution = var.kube_type == "openshift" ? "kROKS" : "kIKS"
@@ -214,13 +213,14 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
         policy_id                 = local.policy_id
       }
     }
-    data_mover_image_location              = var.registration_images.data_mover
-    velero_image_location                  = var.registration_images.velero
-    velero_aws_plugin_image_location       = var.registration_images.velero_aws_plugin
-    velero_openshift_plugin_image_location = var.registration_images.velero_openshift_plugin
-    init_container_image_location          = var.registration_images.init_container
-    kubernetes_type                        = "kCluster"
-    client_private_key                     = chomp(kubernetes_secret_v1.brsagent_token.data["token"])
+    data_mover_image_location                  = var.registration_images.data_mover
+    velero_image_location                      = var.registration_images.velero
+    velero_aws_plugin_image_location           = var.registration_images.velero_aws_plugin
+    velero_openshift_plugin_image_location     = var.registration_images.velero_openshift_plugin
+    init_container_image_location              = var.registration_images.init_container
+    cohesity_dataprotect_plugin_image_location = var.registration_images.cohesity_dataprotect_plugin
+    kubernetes_type                            = "kCluster"
+    client_private_key                         = chomp(kubernetes_secret_v1.brsagent_token.data["token"])
   }
   endpoint_type = var.brs_endpoint_type
   instance_id   = local.brs_instance_guid

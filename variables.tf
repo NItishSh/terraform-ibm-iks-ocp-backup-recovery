@@ -104,6 +104,18 @@ variable "dsc_replicas" {
   type        = number
   default     = 1
   nullable    = false
+
+  validation {
+    condition     = var.dsc_replicas >= 1
+    error_message = "Replicas must be at least 1."
+  }
+}
+
+variable "dsc_helm_timeout" {
+  description = "Timeout in seconds for the Data Source Connector Helm deployment."
+  type        = number
+  default     = 1500
+  nullable    = false
 }
 
 variable "dsc_namespace" {
@@ -130,25 +142,21 @@ variable "brs_endpoint_type" {
   }
 }
 
-variable "registration_name" {
-  type        = string
-  description = "Name of the new registration for the cluster in Backup & Recovery Service. this must be unique within the Backup & Recovery Service instance. Usually set to the cluster name for easy identification."
-  nullable    = false
-}
-
 variable "registration_images" {
   type = object({
-    data_mover              = string
-    velero                  = string
-    velero_aws_plugin       = string
-    velero_openshift_plugin = string
-    init_container          = optional(string, null)
+    data_mover                  = string
+    velero                      = string
+    velero_aws_plugin           = string
+    velero_openshift_plugin     = string
+    cohesity_dataprotect_plugin = string
+    init_container              = optional(string, null)
   })
   default = {
-    data_mover              = "icr.io/ext/brs/cohesity-datamover:7.2.16@sha256:f7fa1cfbb74e469117d553c02deedf6f4a35b3a61647028a9424be346fc3eb09"
-    velero                  = "icr.io/ext/brs/velero:7.2.16@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041"
-    velero_aws_plugin       = "icr.io/ext/brs/velero-plugin-for-aws:7.2.16@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13"
-    velero_openshift_plugin = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.16@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"
+    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.16@sha256:f7fa1cfbb74e469117d553c02deedf6f4a35b3a61647028a9424be346fc3eb09"
+    velero                      = "icr.io/ext/brs/velero:7.2.16@sha256:1a5ee2393f0b1063ef095246d304c1ec4648c3af6a47261325ef039256a4a041"
+    velero_aws_plugin           = "icr.io/ext/brs/velero-plugin-for-aws:7.2.16@sha256:dbcd35bcbf0d4c7deeae67b7dfd55c4fa51880b61307d71eeea3e9e84a370e13"
+    velero_openshift_plugin     = "icr.io/ext/brs/velero-plugin-for-openshift:7.2.16@sha256:6b643edcb920ad379c9ef1e2cca112a2ad0a1d55987f9c27af4022f7e3b19552"
+    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.16@sha256:f57561dee550437bc657ede289ecf9882b5fe58cb01c4403b4bd116681b5e3d6"
   }
   description = "The images required for backup and recovery registration."
   nullable    = false
