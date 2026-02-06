@@ -197,10 +197,6 @@
               "display_name": "DSC Replicas"
             },
             {
-              "key": "dsc_image_version",
-              "display_name": "DSC Image Version"
-            },
-            {
               "key": "brs_connection_name",
               "display_name": "Backup Recovery Service Connection Name"
             },
