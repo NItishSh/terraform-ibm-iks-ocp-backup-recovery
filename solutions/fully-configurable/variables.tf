@@ -146,16 +146,6 @@ variable "dsc_helm_timeout" {
   default     = 1500
   nullable    = false
 }
-variable "dsc_image_version" {
-  description = "Container image for the Data Source Connector."
-  type        = string
-  default     = "icr.io/ext/brs/cohesity-data-source-connector:7.2.16@sha256:2674c764ca46310aef3adb733d950f7786d9bf560bf72c22cff52370e77e29b5"
-  nullable    = false
-  validation {
-    condition     = length(split("@", var.dsc_image_version)[0]) > 0
-    error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<semver-tag>@sha256:<64-hex-digest>'."
-  }
-}
 variable "brs_connection_name" {
   type        = string
   description = "Name of the existing connection from the Backup & Recovery Service instance to be used for protecting the cluster."

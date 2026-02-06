@@ -29,12 +29,11 @@ module "protect_cluster" {
   wait_till         = var.wait_till
   wait_till_timeout = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---
-  dsc_chart_uri     = var.dsc_chart_uri
-  dsc_image_version = var.dsc_image_version
-  dsc_name          = var.dsc_name
-  dsc_replicas      = var.dsc_replicas
-  dsc_namespace     = var.dsc_namespace
-  dsc_helm_timeout  = var.dsc_helm_timeout
+  dsc_chart_uri    = var.dsc_chart_uri
+  dsc_name         = var.dsc_name
+  dsc_replicas     = var.dsc_replicas
+  dsc_namespace    = var.dsc_namespace
+  dsc_helm_timeout = var.dsc_helm_timeout
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
