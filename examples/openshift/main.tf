@@ -117,7 +117,7 @@ module "backup_recovery_instance" {
   resource_tags         = var.resource_tags
   access_tags           = var.access_tags
   instance_name         = "${var.prefix}-brs-instance"
-  connection_name       = "${var.prefix}-brs-connection"
+  connection_name       = "${var.prefix}-brs-connection-RoksVpc"
   create_new_connection = true
 }
 

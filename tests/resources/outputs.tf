@@ -31,3 +31,8 @@ output "brs_connection_name" {
   description = "Name of the Backup and Recovery Service connection."
   sensitive   = true
 }
+
+output "protection_policy_name" {
+  value       = ibm_backup_recovery_protection_policy.existing_policy.name
+  description = "Name of the protection policy."
+}
