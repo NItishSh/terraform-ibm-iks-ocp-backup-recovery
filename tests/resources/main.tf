@@ -96,7 +96,38 @@ module "backup_recovery_instance" {
   ibmcloud_api_key      = var.ibmcloud_api_key
   tags                  = var.resource_tags
   instance_name         = "${var.prefix}-brs-instance"
-  connection_name       = "${var.prefix}-brs-connection"
+  connection_name       = "${var.prefix}-brs-connection-RoksVpc"
   create_new_connection = true
   create_new_instance   = true
+}
+
+resource "ibm_backup_recovery_protection_policy" "existing_policy" {
+  name            = "${var.prefix}-existing-policy"
+  x_ibm_tenant_id = module.backup_recovery_instance.tenant_id
+  endpoint_type   = "private"
+  instance_id     = module.backup_recovery_instance.brs_instance_guid
+  region          = var.region
+  backup_policy {
+    regular {
+      incremental {
+        schedule {
+          day_schedule {
+            frequency = 1
+          }
+          unit = "Days"
+        }
+      }
+      retention {
+        duration = 1
+        unit     = "Days"
+      }
+      primary_backup_target {
+        use_default_backup_target = true
+      }
+    }
+  }
+  retry_options {
+    retries             = 3
+    retry_interval_mins = 60
+  }
 }

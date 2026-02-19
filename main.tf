@@ -142,7 +142,7 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 }
 
 locals {
-  use_existing_policy = contains(["Gold", "Silver", "Bronze"], var.policy.name)
+  use_existing_policy = var.policy.schedule == null && var.policy.retention == null
 
   # Only resolve policy_id if auto-protect is enabled
   policy_id = var.enable_auto_protect ? (
@@ -184,7 +184,6 @@ resource "ibm_backup_recovery_connection_registration_token" "registration_token
   instance_id     = local.brs_instance_guid
   region          = local.brs_instance_region
 
-  # This forces a replacement every time the time_rotating resource rotates
   lifecycle {
     replace_triggered_by = [
       time_rotating.token_rotation

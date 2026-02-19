@@ -116,7 +116,7 @@ module "backup_recovery_instance" {
   ibmcloud_api_key      = var.ibmcloud_api_key
   tags                  = var.resource_tags
   instance_name         = "${var.prefix}-brs-instance"
-  connection_name       = "${var.prefix}-brs-connection"
+  connection_name       = "${var.prefix}-brs-connection-RoksVpc"
   create_new_connection = true
   create_new_instance   = true
 }
