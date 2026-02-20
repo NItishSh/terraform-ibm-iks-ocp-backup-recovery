@@ -160,6 +160,9 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 		{Name: "policy", Value: fmt.Sprintf("{name = %q}", terraform.Output(t, existingTerraformOptions, "protection_policy_name")), DataType: "string"},
+		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
+		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
+		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
 	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
 	cleanupTerraform(t, existingTerraformOptions, prefix)
@@ -197,6 +200,9 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 		{Name: "policy", Value: fmt.Sprintf("{name = %q}", terraform.Output(t, existingTerraformOptions, "protection_policy_name")), DataType: "string"},
+		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
+		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
+		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
 	}
 
 	// Exempt expected resource changes from image version update (7.2.16 -> 7.2.17)

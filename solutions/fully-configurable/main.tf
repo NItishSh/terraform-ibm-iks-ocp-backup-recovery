@@ -21,9 +21,12 @@ module "protect_cluster" {
   kube_type                    = var.kube_type
   ibmcloud_api_key             = var.ibmcloud_api_key
   # --- BRS Instance Details---
-  brs_endpoint_type   = var.brs_endpoint_type
-  brs_instance_crn    = var.brs_instance_crn
-  brs_connection_name = var.brs_connection_name
+  brs_endpoint_type         = var.brs_endpoint_type
+  brs_instance_crn          = var.brs_instance_crn
+  brs_connection_name       = var.brs_connection_name
+  brs_create_new_connection = var.brs_create_new_connection
+  brs_instance_name         = var.brs_instance_name
+  region                    = var.region
   # --- Backup Policy ---
   policy            = var.policy
   wait_till         = var.wait_till
@@ -38,4 +41,7 @@ module "protect_cluster" {
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
+  # --- Resource Tags ---
+  resource_tags = var.resource_tags
+  access_tags   = var.access_tags
 }

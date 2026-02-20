@@ -1,3 +1,17 @@
+module "backup_recovery_instance" {
+  source                    = "terraform-ibm-modules/backup-recovery/ibm"
+  version                   = "v1.6.0"
+  region                    = var.region
+  resource_group_id         = var.cluster_resource_group_id
+  ibmcloud_api_key          = var.ibmcloud_api_key
+  instance_name             = var.brs_instance_name
+  existing_brs_instance_crn = var.brs_instance_crn != "" ? var.brs_instance_crn : null
+  connection_name           = var.brs_connection_name
+  create_new_connection     = var.brs_create_new_connection
+  resource_tags             = var.resource_tags
+  access_tags               = var.access_tags
+}
+
 data "ibm_is_security_group" "clustersg" {
   count = var.add_dsc_rules_to_cluster_sg ? 1 : 0
   name  = "kube-${var.cluster_id}"
@@ -65,9 +79,42 @@ locals {
   dsc_chart_version  = replace(local.chart_with_version, "${local.dsc_chart}:", "")
   dsc_chart_location = replace(local.uri_no_digest, "/${local.chart_with_version}", "")
 }
+data "ibm_container_vpc_worker_pool" "pool" {
+  cluster          = data.ibm_container_vpc_cluster.cluster.id
+  worker_pool_name = data.ibm_container_vpc_cluster.cluster.worker_pools[0].name
+}
 
+resource "ibm_container_vpc_worker_pool" "data_source_connector" {
+  cluster           = data.ibm_container_vpc_cluster.cluster.id
+  worker_pool_name  = "data-source-connector-pool"
+  flavor            = "bx2.4x16" # this flavor works for both IKS and OCP
+  vpc_id            = data.ibm_container_vpc_worker_pool.pool.vpc_id
+  worker_count      = ceil(var.dsc_replicas / length(data.ibm_container_vpc_worker_pool.pool.zones))
+  resource_group_id = var.cluster_resource_group_id
+
+  dynamic "zones" {
+    for_each = data.ibm_container_vpc_worker_pool.pool.zones
+    content {
+      name      = zones.value.name
+      subnet_id = zones.value.subnet_id
+    }
+  }
+
+  labels = {
+    "dedicated" = "data-source-connector"
+  }
+
+  # taints {
+  #   key    = "dedicated"
+  #   value  = "data-source-connector"
+  #   effect = "NoSchedule"
+  # }
+}
 resource "helm_release" "data_source_connector" {
-  depends_on       = [module.dsc_sg_rule]
+  depends_on = [
+    module.dsc_sg_rule,
+    ibm_container_vpc_worker_pool.data_source_connector
+  ]
   name             = var.dsc_name
   chart            = local.dsc_chart
   repository       = local.dsc_chart_location
@@ -91,6 +138,17 @@ resource "helm_release" "data_source_connector" {
       }
       replicaCount     = var.dsc_replicas
       fullnameOverride = var.dsc_name
+      # tolerations = [
+      #   {
+      #     key      = "dedicated"
+      #     operator = "Equal"
+      #     value    = "data-source-connector"
+      #     effect   = "NoSchedule"
+      #   }
+      # ]
+      nodeSelector = {
+        "dedicated" = "data-source-connector"
+      }
     })
   ]
 }
@@ -170,8 +228,9 @@ locals {
   registration_token                   = ibm_backup_recovery_connection_registration_token.registration_token.registration_token
   backup_recovery_instance_public_url  = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.public"]
   backup_recovery_instance_private_url = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.private"]
-  brs_instance_guid                    = element(split(":", var.brs_instance_crn), 7)
-  brs_instance_region                  = element(split(":", var.brs_instance_crn), 5)
+  brs_instance_crn                     = module.backup_recovery_instance.brs_instance_crn
+  brs_instance_guid                    = element(split(":", local.brs_instance_crn), 7)
+  brs_instance_region                  = element(split(":", local.brs_instance_crn), 5)
 }
 resource "time_rotating" "token_rotation" {
   rotation_days = 1

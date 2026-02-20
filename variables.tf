@@ -231,7 +231,7 @@ variable "ibmcloud_api_key" {
 
 variable "brs_connection_name" {
   type        = string
-  description = "Name of the existing connection from the Backup & Recovery Service instance to be used for protecting the cluster."
+  description = "Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster."
   nullable    = false
 }
 
@@ -239,4 +239,39 @@ variable "brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
   nullable    = false
+  default     = ""
+}
+
+variable "brs_instance_name" {
+  type        = string
+  description = "Name of the Backup & Recovery Service instance."
+  nullable    = false
+
+  validation {
+    condition     = var.brs_instance_name != "" || var.brs_instance_crn != ""
+    error_message = "Either 'brs_instance_name' or 'brs_instance_crn' must be provided."
+  }
+}
+
+variable "brs_create_new_connection" {
+  type        = bool
+  description = "Flag to create a new connection from the Backup & Recovery Service instance to the cluster."
+  default     = true
+}
+
+variable "region" {
+  type        = string
+  description = "Region where the Backup & Recovery Service instance needs to be created."
+  nullable    = false
+}
+variable "resource_tags" {
+  type        = list(string)
+  description = "Add user resource tags to the Backup Recovery instance to organize, track, and manage costs."
+  default     = []
+}
+
+variable "access_tags" {
+  type        = list(string)
+  description = "Add existing access management tags to the Backup Recovery instance to manage access."
+  default     = []
 }

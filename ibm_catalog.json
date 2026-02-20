@@ -269,6 +269,26 @@
             {
               "key": "dsc_helm_timeout",
               "display_name": "Helm Timeout (Seconds)"
+            },
+            {
+              "key": "brs_create_new_connection",
+              "display_name": "Create New Connection"
+            },
+            {
+              "key": "brs_instance_name",
+              "display_name": "Backup Recovery Service Instance Name"
+            },
+            {
+              "key": "region",
+              "display_name": "Region"
+            },
+            {
+              "key": "access_tags",
+              "display_name": "Access Tags"
+            },
+            {
+              "key": "resource_tags",
+              "display_name": "Resource Tags"
             }
           ],
           "dependencies": [],

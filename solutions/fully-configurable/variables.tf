@@ -164,6 +164,7 @@ variable "brs_connection_name" {
 variable "brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
+  default     = ""
   nullable    = false
 }
 variable "add_dsc_rules_to_cluster_sg" {
@@ -210,4 +211,42 @@ variable "kube_type" {
     condition     = contains(["kubernetes", "openshift"], var.kube_type)
     error_message = "`kube_type` must be 'kubernetes' or 'openshift'."
   }
+}
+
+variable "brs_create_new_connection" {
+  type        = bool
+  description = "Flag to create a new connection from the Backup & Recovery Service instance to the cluster."
+  default     = true
+  nullable    = false
+}
+
+variable "brs_instance_name" {
+  type        = string
+  description = "Name of the Backup & Recovery Service instance."
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = var.brs_instance_name != "" || var.brs_instance_crn != ""
+    error_message = "Either 'brs_instance_name' or 'brs_instance_crn' must be provided."
+  }
+}
+
+variable "region" {
+  type        = string
+  description = "Region of the Backup & Recovery Service instance."
+  default     = ""
+  nullable    = false
+}
+
+variable "resource_tags" {
+  type        = list(string)
+  description = "Add user resource tags to the Backup Recovery instance to organize, track, and manage costs."
+  default     = []
+}
+
+variable "access_tags" {
+  type        = list(string)
+  description = "Add existing access management tags to the Backup Recovery instance to manage access."
+  default     = []
 }

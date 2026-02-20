@@ -35,3 +35,8 @@ output "protection_policy_name" {
   value       = ibm_backup_recovery_protection_policy.existing_policy.name
   description = "Name of the protection policy."
 }
+
+output "brs_instance_name" {
+  value       = module.backup_recovery_instance.brs_instance.name
+  description = "Name of the Backup and Recovery Service instance."
+}
