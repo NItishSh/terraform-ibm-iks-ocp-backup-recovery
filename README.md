@@ -122,7 +122,7 @@ You need the following permissions to run this module:
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_backup_recovery_instance"></a> [backup\_recovery\_instance](#module\_backup\_recovery\_instance) | terraform-ibm-modules/backup-recovery/ibm | v1.6.1 |
+| <a name="module_backup_recovery_instance"></a> [backup\_recovery\_instance](#module\_backup\_recovery\_instance) | terraform-ibm-modules/backup-recovery/ibm | v1.6.2 |
 | <a name="module_dsc_sg_rule"></a> [dsc\_sg\_rule](#module\_dsc\_sg\_rule) | terraform-ibm-modules/security-group/ibm | v2.8.8 |
 
 ### Resources
