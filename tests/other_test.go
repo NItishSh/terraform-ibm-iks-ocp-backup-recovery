@@ -10,6 +10,7 @@ import (
 
 // Ensure every example directory has a corresponding test
 const ocpExampleDir = "examples/openshift"
+const ocpClassicExampleDir = "examples/openshift-classic"
 
 // ibm_backup_recovery_source_registration requires ignoring updates to kubernetes_params fields which will be fixed in future provider versions
 func setupOcpOptions(t *testing.T, prefix string, dir string) *testhelper.TestOptions {
@@ -28,6 +29,16 @@ func TestRunOCPExample(t *testing.T) {
 	t.Parallel()
 
 	options := setupOcpOptions(t, "brs", ocpExampleDir)
+
+	output, err := options.RunTestConsistency()
+	assert.Nil(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
+}
+
+func TestRunOCPClassicExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupOcpOptions(t, "brs-ocpc", ocpClassicExampleDir)
 
 	output, err := options.RunTestConsistency()
 	assert.Nil(t, err, "This should not have errored")

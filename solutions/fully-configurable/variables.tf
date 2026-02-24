@@ -250,3 +250,14 @@ variable "access_tags" {
   description = "Add existing access management tags to the Backup Recovery instance to manage access."
   default     = []
 }
+
+variable "connection_env_type" {
+  type        = string
+  description = "Type of environment for the connection. Allowed values are 'kIksVpc', 'kIksClassic', 'kRoksVpc', 'kRoksClassic'."
+  default     = "kIksVpc"
+
+  validation {
+    condition     = contains(["kIksVpc", "kIksClassic", "kRoksVpc", "kRoksClassic"], var.connection_env_type)
+    error_message = "`connection_env_type` must be 'kIksVpc', 'kIksClassic', 'kRoksVpc', or 'kRoksClassic'."
+  }
+}

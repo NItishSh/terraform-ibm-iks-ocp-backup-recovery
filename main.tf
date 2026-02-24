@@ -1,6 +1,6 @@
 module "backup_recovery_instance" {
   source                    = "terraform-ibm-modules/backup-recovery/ibm"
-  version                   = "v1.6.2"
+  version                   = "v1.7.0"
   region                    = var.region
   resource_group_id         = var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
@@ -10,6 +10,7 @@ module "backup_recovery_instance" {
   create_new_connection     = var.brs_create_new_connection
   resource_tags             = var.resource_tags
   access_tags               = var.access_tags
+  connection_env_type       = var.connection_env_type
 }
 
 data "ibm_is_security_group" "clustersg" {
@@ -288,6 +289,28 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   endpoint_type = var.brs_endpoint_type
   instance_id   = local.brs_instance_guid
   region        = local.brs_instance_region
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.kube_type == "kubernetes" ? contains(["kIksVpc", "kIksClassic"], var.connection_env_type) :
+        var.kube_type == "openshift" ? contains(["kRoksVpc", "kRoksClassic"], var.connection_env_type) :
+        false
+      )
+      error_message = "Invalid connection_env_type '${var.connection_env_type}' for kube_type '${var.kube_type}'. When kube_type is 'kubernetes', connection_env_type must be 'kIksVpc' or 'kIksClassic'. When kube_type is 'openshift', connection_env_type must be 'kRoksVpc' or 'kRoksClassic'."
+    }
+  }
+}
+
+
+########################################################################################################################
+# Tag cluster with BRS instance CRN
+########################################################################################################################
+
+resource "ibm_resource_tag" "cluster_brs_tag" {
+  resource_id = data.ibm_container_vpc_cluster.cluster.crn
+  tag_type    = "user"
+  tags        = ["brs-instance-crn:${local.brs_instance_crn}", "brs-connection-name:${var.brs_connection_name}"]
 }
 
 locals {

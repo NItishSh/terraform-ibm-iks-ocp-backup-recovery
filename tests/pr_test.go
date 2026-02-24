@@ -26,6 +26,7 @@ import (
 const resourceGroup = "geretain-test-resources"
 const fullyConfigurableTerraformDir = "solutions/fully-configurable"
 const iksExampleDir = "examples/kubernetes"
+const iksClassicExampleDir = "examples/kubernetes-classic"
 
 var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "common-dev-assets", "examples", "tests", "reference-architectures"}
 
@@ -163,6 +164,7 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
 		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
 		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
+		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
 	cleanupTerraform(t, existingTerraformOptions, prefix)
@@ -203,6 +205,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
 		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
 		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
+		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 	}
 
 	// Exempt expected resource changes from image version update (7.2.16 -> 7.2.17)
@@ -243,6 +246,16 @@ func TestRunIKSExample(t *testing.T) {
 	t.Parallel()
 
 	options := setupIKSOptions(t, "brs-adv", iksExampleDir)
+
+	output, err := options.RunTestConsistency()
+	assert.Nil(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
+}
+
+func TestRunIKSClassicExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupIKSOptions(t, "brs-iksc", iksClassicExampleDir)
 
 	output, err := options.RunTestConsistency()
 	assert.Nil(t, err, "This should not have errored")

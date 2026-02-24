@@ -289,6 +289,28 @@
             {
               "key": "resource_tags",
               "display_name": "Resource Tags"
+            },
+            {
+              "key": "connection_env_type",
+              "display_name": "Connection Environment Type",
+              "options": [
+                {
+                  "displayname": "IKS VPC",
+                  "value": "kIksVpc"
+                },
+                {
+                  "displayname": "IKS Classic",
+                  "value": "kIksClassic"
+                },
+                {
+                  "displayname": "ROKS VPC",
+                  "value": "kRoksVpc"
+                },
+                {
+                  "displayname": "ROKS Classic",
+                  "value": "kRoksClassic"
+                }
+              ]
             }
           ],
           "dependencies": [],

@@ -27,6 +27,7 @@ module "protect_cluster" {
   brs_create_new_connection = var.brs_create_new_connection
   brs_instance_name         = var.brs_instance_name
   region                    = var.region
+  connection_env_type       = var.connection_env_type
   # --- Backup Policy ---
   policy            = var.policy
   wait_till         = var.wait_till

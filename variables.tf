@@ -259,6 +259,16 @@ variable "brs_create_new_connection" {
   default     = true
 }
 
+variable "connection_env_type" {
+  type        = string
+  default     = "kIksVpc"
+  description = "Connection environment type to determine the required parameters for creating a new connection. Allowed values are 'kIksVpc', 'kRoksVpc', 'kRoksClassic', and 'kIksClassic'."
+  validation {
+    condition     = contains(["kIksVpc", "kRoksVpc", "kRoksClassic", "kIksClassic"], var.connection_env_type)
+    error_message = "`connection_env_type` must be one of 'kIksVpc', 'kRoksVpc', 'kRoksClassic', or 'kIksClassic'."
+  }
+}
+
 variable "region" {
   type        = string
   description = "Region where the Backup & Recovery Service instance needs to be created."

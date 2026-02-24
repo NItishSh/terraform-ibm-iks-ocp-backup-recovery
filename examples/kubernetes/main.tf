@@ -98,6 +98,7 @@ module "backup_recover_protect_ocp" {
   brs_connection_name       = "${var.prefix}-brs-connection-IksVpc"
   brs_create_new_connection = true
   region                    = var.region
+  connection_env_type       = "kIksVpc"
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"
