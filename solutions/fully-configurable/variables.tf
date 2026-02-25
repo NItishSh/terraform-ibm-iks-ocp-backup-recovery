@@ -94,12 +94,11 @@ variable "policy" {
     use_default_backup_target = true
   }
   validation {
-    condition = contains(["Gold", "Silver", "Bronze"], var.policy.name) ? (
-      var.policy.schedule == null && var.policy.retention == null
-      ) : (
-      var.policy.schedule != null && var.policy.retention != null
+    condition = (
+      (var.policy.schedule == null && var.policy.retention == null) ||
+      (var.policy.schedule != null && var.policy.retention != null)
     )
-    error_message = "If using built-in policies (Gold, Silver, Bronze), do not provide schedule or retention. For custom policies, both are required."
+    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
   }
   description = "The backup schedule and retentions of a Protection Policy. [Learn more](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/blob/main/solutions/fully-configurable/DA_docs.md#protection-policy-variable)"
 }

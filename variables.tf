@@ -209,10 +209,11 @@ variable "policy" {
     use_default_backup_target = true
   }
   validation {
-    condition = (var.policy.schedule == null && var.policy.retention == null) || (
-      var.policy.schedule != null && var.policy.retention != null && !contains(["Gold", "Silver", "Bronze"], var.policy.name)
+    condition = (
+      (var.policy.schedule == null && var.policy.retention == null) ||
+      (var.policy.schedule != null && var.policy.retention != null)
     )
-    error_message = "If schedule and retention are not provided, an existing policy is assumed (valid for any policy name). If schedule and retention are provided, a new custom policy is created (name must not be 'Gold', 'Silver', or 'Bronze')."
+    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
   }
   description = "The backup schedule and retentions of a Protection Policy."
 }

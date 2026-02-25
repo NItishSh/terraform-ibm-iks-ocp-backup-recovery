@@ -5,22 +5,22 @@ The `policy` variable defines backup **schedule**, **retention**, and optional a
 
 ### Main Policy Types
 
-| Policy Style       | Name must be       | Schedule | Retention | Description                                  |
+| Policy Style       | Name               | Schedule | Retention | Description                                  |
 |--------------------|--------------------|----------|-----------|----------------------------------------------|
-| **Built-in**       | Gold / Silver / Bronze | **not allowed** | **not allowed** | Use predefined vendor policy |
-| **Custom**         | anything else      | **required**    | **required**    | Fully customizable schedule + retention      |
+| **Existing**       | any existing policy name | **not allowed** | **not allowed** | Use pre-existing policy by name |
+| **Custom**         | any custom name    | **required**    | **required**    | Fully customizable schedule + retention      |
 
 > **Validation rule** — enforced automatically:
-> - If name = Gold/Silver/Bronze → schedule & retention must be **null/omitted**
-> - For any other name → both schedule **and** retention are **mandatory**
+> - If schedule & retention are **null/omitted** → treated as an existing policy (any name is valid)
+> - If both schedule **and** retention are provided → a new custom policy is created
 
 ### Examples
 
-#### 1. Using Built-in Policy (Recommended for quick/standard protection)
+#### 1. Using an Existing Policy (Recommended for quick/standard protection)
 
 ```
  {
-  name                      = "Gold"
+  name                      = "my-existing-policy"
   use_default_backup_target = true
   # schedule and retention must NOT be set
 }
@@ -133,7 +133,7 @@ The `policy` variable defines backup **schedule**, **retention**, and optional a
 
 ### Policy Best Practices
 
-- Start with built-in **Gold / Silver / Bronze** policies when suitable
+- Start with an existing policy when suitable (omit schedule and retention)
 - Always set both **schedule** + **retention** for custom policies
 - Use descriptive names: `daily-2am-30d`, `weekly-2y`, `hourly-7d`
 - [Policy creation](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-baas-policy-creation)
