@@ -310,7 +310,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 resource "ibm_resource_tag" "cluster_brs_tag" {
   resource_id = data.ibm_container_vpc_cluster.cluster.crn
   tag_type    = "user"
-  tags        = ["brs-instance-crn:${local.brs_instance_crn}", "brs-connection-name:${var.brs_connection_name}"]
+  tags        = ["brs-instance-guid:${local.brs_instance_guid}", "brs-connection-name:${var.brs_connection_name}", "brs-instance-region:${local.brs_instance_region}"]
 }
 
 locals {
