@@ -104,7 +104,7 @@ module "backup_recovery_instance" {
 resource "ibm_backup_recovery_protection_policy" "existing_policy" {
   name            = "${var.prefix}-existing-policy"
   x_ibm_tenant_id = module.backup_recovery_instance.tenant_id
-  endpoint_type   = "private"
+  endpoint_type   = "public"
   instance_id     = module.backup_recovery_instance.brs_instance_guid
   region          = var.region
   backup_policy {

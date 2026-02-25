@@ -111,17 +111,29 @@ resource "ibm_container_vpc_worker_pool" "data_source_connector" {
   #   effect = "NoSchedule"
   # }
 }
+
+resource "kubernetes_namespace_v1" "dsc_namespace" {
+  metadata {
+    name = var.dsc_namespace
+  }
+}
+
+resource "time_sleep" "wait_for_agent_termination" {
+  depends_on       = [ibm_backup_recovery_source_registration.source_registration]
+  destroy_duration = "45s"
+}
 resource "helm_release" "data_source_connector" {
   depends_on = [
     module.dsc_sg_rule,
-    ibm_container_vpc_worker_pool.data_source_connector
+    ibm_container_vpc_worker_pool.data_source_connector,
+    time_sleep.wait_for_agent_termination
   ]
   name             = var.dsc_name
   chart            = local.dsc_chart
   repository       = local.dsc_chart_location
-  namespace        = var.dsc_namespace
+  namespace        = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
   version          = local.dsc_chart_version
-  create_namespace = true
+  create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
   atomic           = true
@@ -159,7 +171,7 @@ resource "helm_release" "data_source_connector" {
 resource "kubernetes_service_account_v1" "brsagent" {
   metadata {
     name      = "brsagent"
-    namespace = helm_release.data_source_connector.metadata.namespace
+    namespace = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
   }
   lifecycle {
     ignore_changes = [
