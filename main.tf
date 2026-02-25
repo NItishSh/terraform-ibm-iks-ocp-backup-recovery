@@ -14,19 +14,36 @@ module "backup_recovery_instance" {
 }
 
 data "ibm_is_security_group" "clustersg" {
-  count = var.add_dsc_rules_to_cluster_sg ? 1 : 0
+  count = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
   name  = "kube-${var.cluster_id}"
 }
 
-data "ibm_container_vpc_cluster" "cluster" {
+locals {
+  is_vpc     = length(regexall("Vpc$", var.connection_env_type)) > 0
+  is_classic = length(regexall("Classic$", var.connection_env_type)) > 0
+
+  cluster_crn                  = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].crn : data.ibm_container_cluster.classic_cluster[0].id
+  cluster_private_endpoint_url = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].private_service_endpoint_url : data.ibm_container_cluster.classic_cluster[0].private_service_endpoint_url
+  cluster_public_endpoint_url  = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].public_service_endpoint_url : data.ibm_container_cluster.classic_cluster[0].public_service_endpoint_url
+  cluster_private_available    = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].private_service_endpoint : data.ibm_container_cluster.classic_cluster[0].private_service_endpoint
+}
+
+data "ibm_container_vpc_cluster" "vpc_cluster" {
+  count             = local.is_vpc ? 1 : 0
   name              = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   wait_till         = var.wait_till
   wait_till_timeout = var.wait_till_timeout
 }
 
+data "ibm_container_cluster" "classic_cluster" {
+  count             = local.is_classic ? 1 : 0
+  name              = var.cluster_id
+  resource_group_id = var.cluster_resource_group_id
+}
+
 module "dsc_sg_rule" {
-  count                        = var.add_dsc_rules_to_cluster_sg ? 1 : 0
+  count                        = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
   source                       = "terraform-ibm-modules/security-group/ibm"
   version                      = "v2.8.9"
   resource_group               = var.cluster_resource_group_id
@@ -81,20 +98,22 @@ locals {
   dsc_chart_location = replace(local.uri_no_digest, "/${local.chart_with_version}", "")
 }
 data "ibm_container_vpc_worker_pool" "pool" {
-  cluster          = data.ibm_container_vpc_cluster.cluster.id
-  worker_pool_name = data.ibm_container_vpc_cluster.cluster.worker_pools[0].name
+  count            = local.is_vpc ? 1 : 0
+  cluster          = data.ibm_container_vpc_cluster.vpc_cluster[0].id
+  worker_pool_name = data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[0].name
 }
 
 resource "ibm_container_vpc_worker_pool" "data_source_connector" {
-  cluster           = data.ibm_container_vpc_cluster.cluster.id
+  count             = local.is_vpc ? 1 : 0
+  cluster           = data.ibm_container_vpc_cluster.vpc_cluster[0].id
   worker_pool_name  = "data-source-connector-pool"
   flavor            = "bx2.4x16" # this flavor works for both IKS and OCP
-  vpc_id            = data.ibm_container_vpc_worker_pool.pool.vpc_id
-  worker_count      = ceil(var.dsc_replicas / length(data.ibm_container_vpc_worker_pool.pool.zones))
+  vpc_id            = data.ibm_container_vpc_worker_pool.pool[0].vpc_id
+  worker_count      = ceil(var.dsc_replicas / length(data.ibm_container_vpc_worker_pool.pool[0].zones))
   resource_group_id = var.cluster_resource_group_id
 
   dynamic "zones" {
-    for_each = data.ibm_container_vpc_worker_pool.pool.zones
+    for_each = data.ibm_container_vpc_worker_pool.pool[0].zones
     content {
       name      = zones.value.name
       subnet_id = zones.value.subnet_id
@@ -119,7 +138,7 @@ resource "kubernetes_namespace_v1" "dsc_namespace" {
 }
 
 resource "time_sleep" "wait_for_agent_termination" {
-  depends_on       = [ibm_backup_recovery_source_registration.source_registration]
+  depends_on       = [module.backup_recovery_instance]
   destroy_duration = "45s"
 }
 resource "helm_release" "data_source_connector" {
@@ -159,9 +178,9 @@ resource "helm_release" "data_source_connector" {
       #     effect   = "NoSchedule"
       #   }
       # ]
-      nodeSelector = {
+      nodeSelector = local.is_vpc ? {
         "dedicated" = "data-source-connector"
-      }
+      } : {}
     })
   ]
 }
@@ -245,11 +264,12 @@ data "ibm_backup_recovery_protection_policies" "existing_policies" {
 }
 
 resource "ibm_backup_recovery_source_registration" "source_registration" {
+  depends_on      = [helm_release.data_source_connector]
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
   connection_id   = local.connection_id
   kubernetes_params {
-    endpoint                = var.cluster_config_endpoint_type == "private" && data.ibm_container_vpc_cluster.cluster.private_service_endpoint ? data.ibm_container_vpc_cluster.cluster.private_service_endpoint_url : data.ibm_container_vpc_cluster.cluster.public_service_endpoint_url
+    endpoint                = var.cluster_config_endpoint_type == "private" && local.cluster_private_available ? local.cluster_private_endpoint_url : local.cluster_public_endpoint_url
     kubernetes_distribution = var.kube_type == "openshift" ? "kROKS" : "kIKS"
     dynamic "auto_protect_config" {
       for_each = var.enable_auto_protect ? [1] : []
@@ -289,7 +309,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 ########################################################################################################################
 
 resource "ibm_resource_tag" "cluster_brs_tag" {
-  resource_id = data.ibm_container_vpc_cluster.cluster.crn
+  resource_id = local.cluster_crn
   tag_type    = "user"
   tags        = ["brs-instance-guid:${local.brs_instance_guid}", "brs-connection-name:${var.brs_connection_name}", "brs-instance-region:${local.brs_instance_region}"]
 }
