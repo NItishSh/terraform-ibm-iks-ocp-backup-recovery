@@ -65,6 +65,8 @@ data "ibm_container_cluster" "cluster" {
   count             = var.cluster_name_id != null ? 1 : 0
   name              = var.cluster_name_id
   resource_group_id = module.resource_group.resource_group_id
+  wait_till         = "Normal"
+  wait_till_timeout = 90
 }
 
 data "ibm_container_cluster_config" "cluster_config" {

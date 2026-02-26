@@ -90,6 +90,8 @@ data "ibm_container_vpc_cluster" "cluster" {
   count             = var.cluster_name_id == null ? 0 : 1
   name              = var.cluster_name_id != null ? var.cluster_name_id : module.ocp_base[0].cluster_name
   resource_group_id = module.resource_group.resource_group_id
+  wait_till         = "Normal"
+  wait_till_timeout = 90
 }
 
 data "ibm_container_cluster_config" "cluster_config" {

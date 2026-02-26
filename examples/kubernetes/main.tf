@@ -64,6 +64,8 @@ resource "ibm_container_vpc_cluster" "cluster" {
 data "ibm_container_vpc_cluster" "cluster" {
   name              = var.cluster_name_id != null ? var.cluster_name_id : ibm_container_vpc_cluster.cluster[0].name
   resource_group_id = module.resource_group.resource_group_id
+  wait_till         = "Normal"
+  wait_till_timeout = 90
 }
 
 data "ibm_container_cluster_config" "cluster_config" {
