@@ -95,6 +95,7 @@ data "ibm_container_vpc_cluster" "cluster" {
 data "ibm_container_cluster_config" "cluster_config" {
   cluster_name_id   = var.cluster_name_id == null ? module.ocp_base[0].cluster_id : data.ibm_container_vpc_cluster.cluster[0].name
   resource_group_id = module.resource_group.resource_group_id
+  config_dir        = "${path.module}/../../kubeconfig"
   admin             = true
 }
 

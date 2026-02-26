@@ -70,6 +70,7 @@ data "ibm_container_cluster" "cluster" {
 data "ibm_container_cluster_config" "cluster_config" {
   cluster_name_id   = var.cluster_name_id != null ? data.ibm_container_cluster.cluster[0].id : ibm_container_cluster.cluster[0].id
   resource_group_id = module.resource_group.resource_group_id
+  config_dir        = "${path.module}/../../kubeconfig"
   admin             = true
 }
 

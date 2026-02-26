@@ -10,8 +10,7 @@ provider "ibm" {
 # Kubernetes provider for IKS Classic cluster
 provider "kubernetes" {
   host                   = data.ibm_container_cluster_config.cluster_config.host
-  client_certificate     = data.ibm_container_cluster_config.cluster_config.admin_certificate
-  client_key             = data.ibm_container_cluster_config.cluster_config.admin_key
+  token                  = data.ibm_container_cluster_config.cluster_config.token
   cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
 }
 
@@ -19,8 +18,7 @@ provider "kubernetes" {
 provider "helm" {
   kubernetes = {
     host                   = data.ibm_container_cluster_config.cluster_config.host
-    client_certificate     = data.ibm_container_cluster_config.cluster_config.admin_certificate
-    client_key             = data.ibm_container_cluster_config.cluster_config.admin_key
+    token                  = data.ibm_container_cluster_config.cluster_config.token
     cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
   }
 
