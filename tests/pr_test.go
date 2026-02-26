@@ -37,7 +37,7 @@ const yamlLocation = "../common-dev-assets/common-go-assets/common-permanent-res
 // Current supported regions
 var validRegions = []string{
 	"us-south",
-	// "us-east", // ignore until issues in this regions are resolved
+	"us-east",
 	"eu-es",
 }
 
