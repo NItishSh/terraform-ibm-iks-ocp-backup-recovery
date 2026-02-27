@@ -119,6 +119,7 @@ func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Op
 		Upgrade: true,
 	})
 
+	terraform.Init(t, existingTerraformOptions)
 	terraform.WorkspaceSelectOrNew(t, existingTerraformOptions, prefix)
 	_, err = terraform.InitAndApplyE(t, existingTerraformOptions)
 	require.NoError(t, err, "Init and Apply of temp existing resource failed")
