@@ -3,7 +3,7 @@
 ##############################################################################
 module "resource_group" {
   source                       = "terraform-ibm-modules/resource-group/ibm"
-  version                      = "1.4.7"
+  version                      = "1.4.8"
   resource_group_name          = var.resource_group == null ? "${var.prefix}-resource-group" : null
   existing_resource_group_name = var.resource_group
 }
@@ -87,15 +87,15 @@ resource "time_sleep" "wait_operators" {
 
 module "backup_recovery_instance" {
   source                = "terraform-ibm-modules/backup-recovery/ibm"
-  version               = "v1.3.0"
+  version               = "v1.6.2"
   region                = var.region
   resource_group_id     = module.resource_group.resource_group_id
   ibmcloud_api_key      = var.ibmcloud_api_key
-  tags                  = var.resource_tags
+  resource_tags         = var.resource_tags
+  access_tags           = var.access_tags
   instance_name         = "${var.prefix}-brs-instance"
   connection_name       = "${var.prefix}-brs-connection"
   create_new_connection = true
-  create_new_instance   = true
 }
 
 ########################################################################################################################
@@ -114,9 +114,9 @@ module "backup_recover_protect_ocp" {
   # enable_auto_protect is set to false to avoid issues when running terraform pipelines. in production, this should be set to true
   enable_auto_protect = false
   # --- B&R Instance ---
-  brs_endpoint_type   = "public"
-  brs_instance_crn    = module.backup_recovery_instance.brs_instance_crn
-  brs_connection_name = module.backup_recovery_instance.connection_name
+  brs_endpoint_type         = "public"
+  existing_brs_instance_crn = module.backup_recovery_instance.brs_instance_crn
+  brs_connection_name       = module.backup_recovery_instance.connection_name
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"

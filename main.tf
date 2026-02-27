@@ -13,7 +13,7 @@ data "ibm_container_vpc_cluster" "cluster" {
 module "dsc_sg_rule" {
   count                        = var.add_dsc_rules_to_cluster_sg ? 1 : 0
   source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.8.8"
+  version                      = "v2.8.9"
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
@@ -156,6 +156,7 @@ locals {
 data "ibm_resource_instance" "backup_recovery_instance" {
   identifier = local.brs_instance_guid
 }
+
 data "ibm_backup_recovery_data_source_connections" "connections" {
   x_ibm_tenant_id  = local.brs_tenant_id
   connection_names = [var.brs_connection_name]
@@ -163,15 +164,17 @@ data "ibm_backup_recovery_data_source_connections" "connections" {
   instance_id      = local.brs_instance_guid
   region           = local.brs_instance_region
 }
+
 locals {
   brs_tenant_id                        = "${data.ibm_resource_instance.backup_recovery_instance.extensions.tenant-id}/"
   connection_id                        = data.ibm_backup_recovery_data_source_connections.connections.connections[0].connection_id
   registration_token                   = ibm_backup_recovery_connection_registration_token.registration_token.registration_token
   backup_recovery_instance_public_url  = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.public"]
   backup_recovery_instance_private_url = data.ibm_resource_instance.backup_recovery_instance.extensions["endpoints.private"]
-  brs_instance_guid                    = element(split(":", var.brs_instance_crn), 7)
-  brs_instance_region                  = element(split(":", var.brs_instance_crn), 5)
+  brs_instance_guid                    = element(split(":", var.existing_brs_instance_crn), 7)
+  brs_instance_region                  = element(split(":", var.existing_brs_instance_crn), 5)
 }
+
 resource "time_rotating" "token_rotation" {
   rotation_days = 1
 }
@@ -190,6 +193,7 @@ resource "ibm_backup_recovery_connection_registration_token" "registration_token
     ]
   }
 }
+
 data "ibm_backup_recovery_protection_policies" "existing_policies" {
   count           = local.use_existing_policy ? 1 : 0
   x_ibm_tenant_id = local.brs_tenant_id
@@ -226,7 +230,6 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   instance_id   = local.brs_instance_guid
   region        = local.brs_instance_region
 }
-
 
 locals {
   backup_recovery_instance_url = var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url : local.backup_recovery_instance_private_url

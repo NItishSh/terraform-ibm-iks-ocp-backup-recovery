@@ -237,7 +237,7 @@ variable "brs_connection_name" {
   nullable    = false
 }
 
-variable "brs_instance_crn" {
+variable "existing_brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
   nullable    = false

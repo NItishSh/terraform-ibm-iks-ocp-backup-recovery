@@ -205,7 +205,7 @@
               "display_name": "Backup Recovery Service Connection Name"
             },
             {
-              "key": "brs_instance_crn",
+              "key": "existing_brs_instance_crn",
               "display_name": "Backup Recovery Service Instance",
               "type": "string",
               "custom_config": {

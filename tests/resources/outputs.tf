@@ -29,4 +29,5 @@ output "brs_instance_crn" {
 output "brs_connection_name" {
   value       = module.backup_recovery_instance.connection_name
   description = "Name of the Backup and Recovery Service connection."
+  sensitive   = true
 }

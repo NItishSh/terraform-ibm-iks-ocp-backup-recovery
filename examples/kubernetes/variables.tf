@@ -28,6 +28,12 @@ variable "resource_tags" {
   default     = []
 }
 
+variable "access_tags" {
+  type        = list(string)
+  description = "A list of access tags to apply to the resources created by the module."
+  default     = []
+}
+
 variable "region" {
   type        = string
   description = "Region where resources are created."

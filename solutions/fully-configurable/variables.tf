@@ -161,7 +161,7 @@ variable "brs_connection_name" {
   description = "Name of the existing connection from the Backup & Recovery Service instance to be used for protecting the cluster."
   nullable    = false
 }
-variable "brs_instance_crn" {
+variable "existing_brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
   nullable    = false
