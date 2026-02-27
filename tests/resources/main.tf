@@ -89,16 +89,17 @@ module "ocp_base" {
 
 
 module "backup_recovery_instance" {
-  source                = "terraform-ibm-modules/backup-recovery/ibm"
-  version               = "v1.7.1"
-  region                = var.region
-  resource_group_id     = module.resource_group.resource_group_id
-  ibmcloud_api_key      = var.ibmcloud_api_key
-  resource_tags         = var.resource_tags
-  instance_name         = "${var.prefix}-brs-instance"
-  connection_name       = "${var.prefix}-brs-connection-RoksVpc"
-  create_new_connection = true
-  connection_env_type   = "kRoksVpc"
+  source                    = "terraform-ibm-modules/backup-recovery/ibm"
+  version                   = "v1.7.1"
+  region                    = var.region
+  resource_group_id         = module.resource_group.resource_group_id
+  ibmcloud_api_key          = var.ibmcloud_api_key
+  resource_tags             = var.resource_tags
+  instance_name             = "${var.prefix}-brs-instance"
+  connection_name           = "${var.prefix}-brs-connection-RoksVpc"
+  create_new_connection     = true
+  connection_env_type       = "kRoksVpc"
+  existing_brs_instance_crn = var.brs_instance_crn
 }
 
 resource "ibm_backup_recovery_protection_policy" "existing_policy" {

@@ -27,3 +27,9 @@ variable "resource_group" {
   description = "The name of an existing resource group to provision resources in. If not specified, a new resource group is created with the `prefix` variable."
   default     = null
 }
+
+variable "brs_instance_crn" {
+  type        = string
+  description = "CRN of an existing BRS instance to use. If not provided, a new instance will be created."
+  default     = ""
+}
