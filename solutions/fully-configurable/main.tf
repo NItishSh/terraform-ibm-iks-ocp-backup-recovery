@@ -7,13 +7,6 @@ data "ibm_container_cluster_config" "cluster_config" {
   admin             = true
 }
 
-
-locals {
-  existing_brs_instance_crn = var.existing_brs_instance_crn
-  brs_instance_name         = var.brs_instance_name
-  brs_connection_name       = var.brs_connection_name
-}
-
 module "protect_cluster" {
   source                       = "../.."
   cluster_id                   = var.cluster_id
@@ -24,10 +17,10 @@ module "protect_cluster" {
   ibmcloud_api_key             = var.ibmcloud_api_key
   # --- BRS Instance Details---
   brs_endpoint_type         = var.brs_endpoint_type
-  existing_brs_instance_crn = local.existing_brs_instance_crn
-  brs_instance_name         = local.brs_instance_name
+  existing_brs_instance_crn = var.existing_brs_instance_crn
+  brs_instance_name         = var.brs_instance_name
   # --- BRS Connection Details---
-  brs_connection_name       = local.brs_connection_name
+  brs_connection_name       = var.brs_connection_name
   brs_create_new_connection = var.brs_create_new_connection
   region                    = var.region
   connection_env_type       = var.connection_env_type

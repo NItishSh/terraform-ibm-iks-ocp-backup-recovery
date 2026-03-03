@@ -320,14 +320,8 @@ variable "existing_brs_instance_crn" {
 
 variable "brs_instance_name" {
   type        = string
-  description = "Name of the Backup & Recovery Service instance."
-
-  validation {
-    condition     = var.brs_instance_name != ""
-    error_message = "The 'brs_instance_name' must not be an empty string."
-  }
-
-  nullable = false
+  description = "Name of the Backup & Recovery Service instance. Required only when `existing_brs_instance_crn` is not provided."
+  default     = null
 }
 
 variable "brs_create_new_connection" {

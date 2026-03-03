@@ -8,9 +8,9 @@ locals {
 }
 
 module "crn_parser" {
+  count   = local.existing_brs_instance_crn == null ? 0 : 1
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
   version = "1.4.2"
-  count   = local.existing_brs_instance_crn == null ? 0 : 1
   crn     = local.existing_brs_instance_crn
 }
 
@@ -29,6 +29,17 @@ module "backup_recovery_instance" {
   resource_tags             = var.resource_tags
   access_tags               = var.access_tags
   connection_env_type       = var.connection_env_type
+}
+
+check "brs_instance_name_required" {
+  assert {
+    condition     = local.existing_brs_instance_crn != null || local.brs_instance_name != null
+    error_message = "'brs_instance_name' is required when 'existing_brs_instance_crn' is not provided."
+  }
+  assert {
+    condition     = local.brs_connection_name != null
+    error_message = "'brs_connection_name' is required and must not be empty."
+  }
 }
 
 data "ibm_is_security_group" "clustersg" {
@@ -151,21 +162,39 @@ resource "ibm_container_vpc_worker_pool" "data_source_connector" {
   # }
 }
 
+resource "kubernetes_namespace_v1" "dsc_namespace" {
+  metadata {
+    name = var.dsc_namespace
+  }
+}
+
 resource "helm_release" "data_source_connector" {
   depends_on = [
     module.dsc_sg_rule,
-    ibm_container_vpc_worker_pool.data_source_connector
+    ibm_container_vpc_worker_pool.data_source_connector,
+    kubernetes_namespace_v1.dsc_namespace
   ]
   name             = var.dsc_name
   chart            = local.dsc_chart
   repository       = local.dsc_chart_location
-  namespace        = var.dsc_namespace
+  namespace        = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
   version          = local.dsc_chart_version
-  create_namespace = true
+  create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
   atomic           = true
   upgrade_install  = true
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.kube_type == "kubernetes" ? contains(["kIksVpc", "kIksClassic"], var.connection_env_type) :
+        var.kube_type == "openshift" ? contains(["kRoksVpc", "kRoksClassic"], var.connection_env_type) :
+        false
+      )
+      error_message = "Invalid connection_env_type '${var.connection_env_type}' for kube_type '${var.kube_type}'. When kube_type is 'kubernetes', connection_env_type must be 'kIksVpc' or 'kIksClassic'. When kube_type is 'openshift', connection_env_type must be 'kRoksVpc' or 'kRoksClassic'."
+    }
+  }
   values = [
     yamlencode({
       secrets = {
@@ -303,16 +332,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   instance_id   = local.brs_instance_guid
   region        = local.brs_instance_region
 
-  lifecycle {
-    precondition {
-      condition = (
-        var.kube_type == "kubernetes" ? contains(["kIksVpc", "kIksClassic"], var.connection_env_type) :
-        var.kube_type == "openshift" ? contains(["kRoksVpc", "kRoksClassic"], var.connection_env_type) :
-        false
-      )
-      error_message = "Invalid connection_env_type '${var.connection_env_type}' for kube_type '${var.kube_type}'. When kube_type is 'kubernetes', connection_env_type must be 'kIksVpc' or 'kIksClassic'. When kube_type is 'openshift', connection_env_type must be 'kRoksVpc' or 'kRoksClassic'."
-    }
-  }
+
 }
 
 
@@ -323,7 +343,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 resource "ibm_resource_tag" "cluster_brs_tag" {
   resource_id = local.cluster_crn
   tag_type    = "user"
-  tags        = ["brs-instance-guid:${local.brs_instance_guid}", "brs-connection-name:${var.brs_connection_name}", "brs-instance-region:${local.brs_instance_region}"]
+  tags        = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]
 }
 
 locals {

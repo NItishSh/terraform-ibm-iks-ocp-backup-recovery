@@ -137,6 +137,7 @@ You need the following permissions to run this module:
 | [ibm_container_vpc_worker_pool.data_source_connector](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/container_vpc_worker_pool) | resource |
 | [ibm_resource_tag.cluster_brs_tag](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/resources/resource_tag) | resource |
 | [kubernetes_cluster_role_binding_v1.brsagent_admin](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/cluster_role_binding_v1) | resource |
+| [kubernetes_namespace_v1.dsc_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace_v1) | resource |
 | [kubernetes_secret_v1.brsagent_token](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret_v1) | resource |
 | [kubernetes_service_account_v1.brsagent](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/service_account_v1) | resource |
 | [terraform_data.delete_auto_protect_pg](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -155,7 +156,7 @@ You need the following permissions to run this module:
 | <a name="input_brs_connection_name"></a> [brs\_connection\_name](#input\_brs\_connection\_name) | Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster. | `string` | n/a | yes |
 | <a name="input_brs_create_new_connection"></a> [brs\_create\_new\_connection](#input\_brs\_create\_new\_connection) | Flag to create a new connection from the Backup & Recovery Service instance to the cluster. | `bool` | `true` | no |
 | <a name="input_brs_endpoint_type"></a> [brs\_endpoint\_type](#input\_brs\_endpoint\_type) | The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'. | `string` | `"private"` | no |
-| <a name="input_brs_instance_name"></a> [brs\_instance\_name](#input\_brs\_instance\_name) | Name of the Backup & Recovery Service instance. | `string` | n/a | yes |
+| <a name="input_brs_instance_name"></a> [brs\_instance\_name](#input\_brs\_instance\_name) | Name of the Backup & Recovery Service instance. Required only when `existing_brs_instance_crn` is not provided. | `string` | `null` | no |
 | <a name="input_cluster_config_endpoint_type"></a> [cluster\_config\_endpoint\_type](#input\_cluster\_config\_endpoint\_type) | The type of endpoint to use for the cluster config access: `default`, `private`, `vpe`, or `link`. The `default` value uses the default endpoint of the cluster. | `string` | `"default"` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | The ID of the cluster designated for backup and recovery. | `string` | n/a | yes |
 | <a name="input_cluster_resource_group_id"></a> [cluster\_resource\_group\_id](#input\_cluster\_resource\_group\_id) | Resource group ID the cluster is deployed in. | `string` | n/a | yes |
