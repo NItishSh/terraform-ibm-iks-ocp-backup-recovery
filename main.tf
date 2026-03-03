@@ -1,17 +1,14 @@
 locals {
-  existing_brs_instance_crn = var.existing_brs_instance_crn == "" ? null : var.existing_brs_instance_crn
-  brs_instance_name         = var.brs_instance_name == "" ? null : var.brs_instance_name
-  brs_connection_name       = var.brs_connection_name == "" ? null : var.brs_connection_name
   # brs_region is set to cluster region when creating a new BRS instance
   # otherwise it is set to the region of the existing BRS instance
-  brs_region = local.existing_brs_instance_crn != null ? module.crn_parser[0].region : var.region
+  brs_region = var.existing_brs_instance_crn != null ? module.crn_parser[0].region : var.region
 }
 
 module "crn_parser" {
-  count   = local.existing_brs_instance_crn == null ? 0 : 1
+  count   = var.existing_brs_instance_crn == null ? 0 : 1
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
   version = "1.4.2"
-  crn     = local.existing_brs_instance_crn
+  crn     = var.existing_brs_instance_crn
 }
 
 
@@ -22,9 +19,9 @@ module "backup_recovery_instance" {
   region                    = local.brs_region
   resource_group_id         = var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
-  instance_name             = local.brs_instance_name
-  existing_brs_instance_crn = local.existing_brs_instance_crn
-  connection_name           = local.brs_connection_name
+  instance_name             = var.brs_instance_name
+  existing_brs_instance_crn = var.existing_brs_instance_crn
+  connection_name           = var.brs_connection_name
   create_new_connection     = var.brs_create_new_connection
   resource_tags             = var.resource_tags
   access_tags               = var.access_tags
@@ -33,12 +30,8 @@ module "backup_recovery_instance" {
 
 check "brs_instance_name_required" {
   assert {
-    condition     = local.existing_brs_instance_crn != null || local.brs_instance_name != null
+    condition     = var.existing_brs_instance_crn != null || var.brs_instance_name != null
     error_message = "'brs_instance_name' is required when 'existing_brs_instance_crn' is not provided."
-  }
-  assert {
-    condition     = local.brs_connection_name != null
-    error_message = "'brs_connection_name' is required and must not be empty."
   }
 }
 

@@ -310,18 +310,33 @@ variable "brs_connection_name" {
   type        = string
   description = "Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster."
   nullable    = false
+
+  validation {
+    condition     = var.brs_connection_name != ""
+    error_message = "'brs_connection_name' must not be an empty string."
+  }
 }
 
 variable "existing_brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
   default     = null
+
+  validation {
+    condition     = var.existing_brs_instance_crn == null || can(regex("^crn:v1:[a-z0-9-]+:[a-z0-9-]*:[a-z0-9-]+:[a-z0-9-]*:a/[a-f0-9]+:[a-f0-9-]+::$", var.existing_brs_instance_crn))
+    error_message = "'existing_brs_instance_crn' must be a valid CRN. Example: crn:v1:bluemix:public:backup-recovery:<region>:a/<account-id>:<instance-guid>::"
+  }
 }
 
 variable "brs_instance_name" {
   type        = string
   description = "Name of the Backup & Recovery Service instance. Required only when `existing_brs_instance_crn` is not provided."
   default     = null
+
+  validation {
+    condition     = var.brs_instance_name == null || var.brs_instance_name != ""
+    error_message = "'brs_instance_name' must not be an empty string. Either provide a valid name or leave it as null."
+  }
 }
 
 variable "brs_create_new_connection" {
