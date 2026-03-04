@@ -23,10 +23,11 @@ func TestRunIKSClassicExample(t *testing.T) {
 	})
 
 	options.TerraformVars = map[string]interface{}{
-		"classic_cluster": true,
-		"prefix":          "brs-iks-classic",
-		"region":          region,
-		"resource_group":  resourceGroup,
+		"classic_cluster":           true,
+		"prefix":                    "brs-iks-classic",
+		"region":                    region,
+		"resource_group":            resourceGroup,
+		"existing_brs_instance_crn": permanentResources["brs_us_east_crn"].(string),
 	}
 
 	output, err := options.RunTestConsistency()
@@ -45,10 +46,11 @@ func TestRunOCPClassicExample(t *testing.T) {
 	})
 
 	options.TerraformVars = map[string]interface{}{
-		"classic_cluster": true,
-		"prefix":          "brs-ocp-classic",
-		"region":          region,
-		"resource_group":  resourceGroup,
+		"classic_cluster":           true,
+		"prefix":                    "brs-ocp-classic",
+		"region":                    region,
+		"resource_group":            resourceGroup,
+		"existing_brs_instance_crn": permanentResources["brs_us_east_crn"].(string),
 	}
 
 	output, err := options.RunTestConsistency()
