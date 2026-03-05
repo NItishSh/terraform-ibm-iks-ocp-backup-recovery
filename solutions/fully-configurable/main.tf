@@ -7,6 +7,17 @@ data "ibm_container_cluster_config" "cluster_config" {
   admin             = true
 }
 
+module "existing_brs_crn_parser" {
+  count   = var.existing_brs_instance_crn != null ? 1 : 0
+  source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
+  version = "1.4.2"
+  crn     = var.existing_brs_instance_crn
+}
+
+locals {
+  region = var.existing_brs_instance_crn != null ? module.existing_brs_crn_parser[0].region : var.region
+}
+
 module "protect_cluster" {
   source                       = "../.."
   cluster_id                   = var.cluster_id
@@ -22,7 +33,7 @@ module "protect_cluster" {
   # --- BRS Connection Details---
   brs_connection_name       = var.brs_connection_name
   brs_create_new_connection = var.brs_create_new_connection
-  region                    = var.region
+  region                    = local.region
   connection_env_type       = var.connection_env_type
   # --- Backup Policy ---
   policy            = var.policy

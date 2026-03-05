@@ -149,7 +149,11 @@ variable "ibmcloud_api_key" {
 variable "region" {
   description = "Region where the Backup & Recovery Service instance needs to be created."
   type        = string
-  nullable    = false
+  default     = null
+  validation {
+    condition     = var.existing_brs_instance_crn != null || var.region != null
+    error_message = "`region` is required when `existing_brs_instance_crn` is not provided."
+  }
 }
 
 variable "brs_endpoint_type" {
@@ -182,6 +186,10 @@ variable "brs_instance_name" {
   validation {
     condition     = var.brs_instance_name == null || var.brs_instance_name != ""
     error_message = "'brs_instance_name' must not be an empty string. Either provide a valid name or leave it as null."
+  }
+  validation {
+    condition     = var.existing_brs_instance_crn != null || var.brs_instance_name != null
+    error_message = "`brs_instance_name` is required when `existing_brs_instance_crn` is not provided."
   }
 }
 

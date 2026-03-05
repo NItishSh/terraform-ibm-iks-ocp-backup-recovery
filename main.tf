@@ -77,13 +77,6 @@ module "backup_recovery_instance" {
   connection_env_type       = var.connection_env_type
 }
 
-check "brs_instance_name_required" {
-  assert {
-    condition     = var.existing_brs_instance_crn != null || var.brs_instance_name != null
-    error_message = "'brs_instance_name' is required when 'existing_brs_instance_crn' is not provided."
-  }
-}
-
 ##############################################################################
 # Cluster Data Sources
 ##############################################################################

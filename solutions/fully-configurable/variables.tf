@@ -36,13 +36,11 @@ variable "cluster_config_endpoint_type" {
   description = "The type of endpoint to use for the cluster config access: `default`, `private`, `vpe`, or `link`. The `default` value uses the default endpoint of the cluster."
   type        = string
   default     = "private"
-
+  nullable    = false # use default if null is passed in
   validation {
     error_message = "Invalid endpoint type. Valid values are `default`, `private`, `vpe`, or `link`."
     condition     = contains(["default", "private", "vpe", "link"], var.cluster_config_endpoint_type)
   }
-
-  nullable = false
 }
 
 variable "wait_till" {
@@ -56,6 +54,7 @@ variable "wait_till_timeout" {
   type        = number
   default     = 90
 }
+
 ##############################################################
 # Backup Related
 ##############################################################
@@ -193,18 +192,21 @@ variable "enable_auto_protect" {
   default     = true
   nullable    = false
 }
+
 variable "dsc_namespace" {
   description = "The namespace in the cluster where the Data Source Connector will be deployed."
   type        = string
   default     = "ibm-brs-data-source-connector"
   nullable    = false
 }
+
 variable "dsc_name" {
   description = "Release name for the Data Source Connector Helm deployment."
   type        = string
   default     = "dsc"
   nullable    = false
 }
+
 variable "dsc_replicas" {
   description = <<-EOT
   Number of Data Source Connector pods to run.
@@ -216,44 +218,49 @@ variable "dsc_replicas" {
   default     = 3
   nullable    = false
 }
+
 variable "dsc_helm_timeout" {
   description = "Timeout in seconds for the Data Source Connector Helm deployment."
   type        = number
   default     = 1500
   nullable    = false
 }
+
 variable "dsc_storage_class" {
   type        = string
   description = "Storage class to use for the Data Source Connector persistent volume. By default, it uses 'ibmc-vpc-block-metro-5iops-tier' for VPC clusters and 'ibmc-block-silver' for Classic clusters."
   default     = "ibmc-vpc-block-metro-5iops-tier"
 }
+
 variable "dsc_image_version" {
   description = "Container image for the Data Source Connector."
   type        = string
   default     = "icr.io/ext/brs/brs-ds-connector:7.2.17-release-20260108-ed857f1c@sha256:560ff2170c880dc19712e0f37ba1575240e462f5e2a2ecbc4ecb791aa471f2d0"
-
+  nullable    = false
   validation {
     condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
     error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<tag>@sha256:<64-hex-digest>'."
   }
-
-  nullable = false
 }
+
 variable "brs_connection_name" {
   type        = string
   description = "Name of the existing connection from the Backup & Recovery Service instance to be used for protecting the cluster."
   nullable    = false
 }
+
 variable "existing_brs_instance_crn" {
   type        = string
   description = "CRN of the Backup & Recovery Service instance."
   default     = null
 }
+
 variable "add_dsc_rules_to_cluster_sg" {
   type        = bool
   description = "Set to `true` to automatically add required security group rules for the Data Source Connector and set to `false` to only register the cluster and create the policy."
   default     = false
 }
+
 variable "brs_endpoint_type" {
   type        = string
   description = "The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'."
@@ -264,6 +271,7 @@ variable "brs_endpoint_type" {
     error_message = "`endpoint_type` must be 'public' or 'private'."
   }
 }
+
 variable "registration_images" {
   type = object({
     data_mover                  = string
@@ -295,11 +303,15 @@ variable "kube_type" {
   }
 }
 
-
 variable "brs_instance_name" {
   type        = string
   description = "Name of the Backup & Recovery Service instance. Required only when `existing_brs_instance_crn` is not provided."
   default     = null
+
+  validation {
+    condition     = var.existing_brs_instance_crn != null || var.brs_instance_name != null
+    error_message = "`brs_instance_name` is required when `existing_brs_instance_crn` is not provided."
+  }
 }
 
 variable "brs_create_new_connection" {
@@ -311,9 +323,13 @@ variable "brs_create_new_connection" {
 
 variable "region" {
   type        = string
-  description = "Region of the Backup & Recovery Service instance."
-  default     = ""
-  nullable    = false
+  description = "Region of the Backup & Recovery Service instance. Required only when `existing_brs_instance_crn` is not provided."
+  default     = null
+
+  validation {
+    condition     = var.existing_brs_instance_crn != null || var.region != null
+    error_message = "`region` is required when `existing_brs_instance_crn` is not provided."
+  }
 }
 
 variable "resource_tags" {
@@ -331,7 +347,7 @@ variable "access_tags" {
 variable "connection_env_type" {
   type        = string
   description = "Type of environment for the connection. Allowed values are 'kIksVpc', 'kIksClassic', 'kRoksVpc', 'kRoksClassic'."
-  default     = "kIksVpc"
+  default     = "kRoksVpc"
 
   validation {
     condition     = contains(["kIksVpc", "kIksClassic", "kRoksVpc", "kRoksClassic"], var.connection_env_type)

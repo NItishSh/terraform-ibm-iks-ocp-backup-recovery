@@ -113,7 +113,7 @@ func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Op
 			"prefix":                    prefix,
 			"region":                    region,
 			"resource_group":            resourceGroup,
-			"existing_brs_instance_crn": permanentResources["brs_us_east_crn"].(string),
+			"existing_brs_instance_crn": permanentResources["brs_us_east_crn"],
 		},
 		// Set Upgrade to true to ensure latest version of providers and modules are used by terratest.
 		// This is the same as setting the -upgrade=true flag with terraform.
@@ -145,7 +145,7 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "cluster_id", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
 		{Name: "cluster_resource_group_id", Value: terraform.Output(t, existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
 		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
-		{Name: "existing_brs_instance_crn", Value: permanentResources["brs_us_east_crn"].(string), DataType: "string"},
+		{Name: "existing_brs_instance_crn", Value: permanentResources["brs_us_east_crn"], DataType: "string"},
 		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
 		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
@@ -263,7 +263,7 @@ func setupOptions(t *testing.T, prefix string, dir string, exemptionList []strin
 	if options.TerraformVars == nil {
 		options.TerraformVars = map[string]interface{}{}
 	}
-	options.TerraformVars["existing_brs_instance_crn"] = permanentResources["brs_us_east_crn"].(string)
+	options.TerraformVars["existing_brs_instance_crn"] = permanentResources["brs_us_east_crn"]
 
 	return options
 }
@@ -271,7 +271,7 @@ func setupOptions(t *testing.T, prefix string, dir string, exemptionList []strin
 func TestRunIKSExample(t *testing.T) {
 	t.Parallel()
 
-	options := setupOptions(t, "brs-adv", iksExampleDir, []string{
+	options := setupOptions(t, "brs-iks", iksExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
 		"ibm_container_vpc_cluster.cluster[0]",
 		"ibm_container_cluster.cluster[0]",
@@ -285,7 +285,7 @@ func TestRunIKSExample(t *testing.T) {
 func TestRunOCPExample(t *testing.T) {
 	t.Parallel()
 
-	options := setupOptions(t, "brs", ocpExampleDir, []string{
+	options := setupOptions(t, "brs-ocp", ocpExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
 		"module.ocp_base[0].ibm_container_vpc_cluster.cluster[0]",
 		"ibm_container_cluster.cluster[0]",
