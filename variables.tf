@@ -66,7 +66,7 @@ variable "wait_till_timeout" {
 ##############################################################################
 
 variable "add_dsc_rules_to_cluster_sg" {
-  description = "Set to `true` to automatically add required security group rules for the Data Source Connector and set to `false` to only register the cluster and create the policy."
+  description = "Set to `true` to automatically add the security group rules required by the Data Source Connector. This is mandatory when registering the cluster via its public service endpoint. Set to `false` to only register the cluster and create the policy without modifying security groups."
   type        = bool
   default     = true
 }

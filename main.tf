@@ -15,6 +15,8 @@ locals {
   cluster_private_endpoint_url = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].private_service_endpoint_url : data.ibm_container_cluster.classic_cluster[0].private_service_endpoint_url
   cluster_public_endpoint_url  = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].public_service_endpoint_url : data.ibm_container_cluster.classic_cluster[0].public_service_endpoint_url
   cluster_private_available    = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].private_service_endpoint : data.ibm_container_cluster.classic_cluster[0].private_service_endpoint
+  cluster_endpoint             = var.cluster_config_endpoint_type == "private" && local.cluster_private_available ? local.cluster_private_endpoint_url : local.cluster_public_endpoint_url
+  cluster_endpoint_port        = element(split(":", local.cluster_endpoint), -1)
 
   # --- Helm chart URI parsing ---
   uri_no_digest      = split("@", var.dsc_chart_uri)[0]
@@ -99,12 +101,6 @@ data "ibm_container_cluster" "classic_cluster" {
   wait_till_timeout = var.wait_till_timeout
 }
 
-data "ibm_is_security_group" "clustersg" {
-  count = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
-
-  name = "kube-${var.cluster_id}"
-}
-
 data "ibm_container_vpc_worker_pool" "pool" {
   count = local.is_vpc ? 1 : 0
 
@@ -144,21 +140,12 @@ module "dsc_sg_rule" {
       }
     },
     {
-      name      = "allow-outbound-50001-from-cdsc-to-brs-dataplane"
+      name      = "allow-outbound-${local.cluster_endpoint_port}-from-cdsc-to-cluster-api"
       direction = "outbound"
       remote    = "0.0.0.0/0"
       tcp = {
-        port_max = 50001
-        port_min = 50001
-      }
-    },
-    {
-      name      = "allow-inbound-3000-from-kube-cluster"
-      direction = "inbound"
-      remote    = data.ibm_is_security_group.clustersg[0].id
-      tcp = {
-        port_max = 3000
-        port_min = 3000
+        port_max = local.cluster_endpoint_port
+        port_min = local.cluster_endpoint_port
       }
     }
   ]
@@ -551,7 +538,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   region          = local.brs_instance_region
 
   kubernetes_params {
-    endpoint                = var.cluster_config_endpoint_type == "private" && local.cluster_private_available ? local.cluster_private_endpoint_url : local.cluster_public_endpoint_url
+    endpoint                = local.cluster_endpoint
     kubernetes_distribution = var.kube_type == "openshift" ? "kROKS" : "kIKS"
     dynamic "auto_protect_config" {
       for_each = var.enable_auto_protect ? [1] : []

@@ -273,7 +273,7 @@ func TestRunIKSExample(t *testing.T) {
 
 	options := setupOptions(t, "brs-iks", iksExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
-		"ibm_container_vpc_cluster.cluster[0]",
+		"ibm_container_vpc_cluster.vpc_cluster[0]",
 		"ibm_container_cluster.cluster[0]",
 	})
 

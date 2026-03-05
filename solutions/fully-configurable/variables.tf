@@ -263,7 +263,7 @@ variable "existing_brs_instance_crn" {
 
 variable "add_dsc_rules_to_cluster_sg" {
   type        = bool
-  description = "Set to `true` to automatically add required security group rules for the Data Source Connector and set to `false` to only register the cluster and create the policy."
+  description = "Set to `true` to automatically add the security group rules required by the Data Source Connector. This is mandatory when registering the cluster via its public service endpoint. Set to `false` to only register the cluster and create the policy without modifying security groups."
   default     = false
 }
 
