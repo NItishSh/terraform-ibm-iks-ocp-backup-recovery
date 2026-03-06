@@ -50,3 +50,27 @@ If you provide a value, the module will use that existing cluster instead of cre
 EOT
   default     = null
 }
+
+variable "dsc_storage_class" {
+  type        = string
+  description = "Storage class to use for the Data Source Connector persistent volume. By default, it uses 'ibmc-vpc-block-metro-5iops-tier' for VPC clusters and 'ibmc-block-silver' for Classic clusters."
+  default     = null
+}
+
+variable "existing_brs_instance_crn" {
+  type        = string
+  description = "CRN of an existing BRS instance to use. If not provided, a new instance will be created."
+  default     = null
+}
+
+variable "classic_cluster" {
+  type        = bool
+  description = "Set to true to provision a Classic cluster, false to provision a VPC cluster."
+  default     = false
+}
+
+variable "datacenter" {
+  type        = string
+  description = "The classic infrastructure datacenter where the cluster is created. Only used if classic_cluster is true."
+  default     = "dal10"
+}

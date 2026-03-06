@@ -1,6 +1,7 @@
 ##############################################################################
 # Resource Group
 ##############################################################################
+
 module "resource_group" {
   source                       = "terraform-ibm-modules/resource-group/ibm"
   version                      = "1.4.8"
@@ -10,15 +11,10 @@ module "resource_group" {
 
 ########################################################################################################################
 # VPC + Subnet + Public Gateway
-#
-# NOTE: This is a very simple VPC with single subnet in a single zone with a public gateway enabled, that will allow
-# all traffic ingress/egress by default.
-# For production use cases this would need to be enhanced by adding more subnets and zones for resiliency, and
-# ACLs/Security Groups for network security.
 ########################################################################################################################
 
 resource "ibm_is_vpc" "vpc" {
-  count                     = var.cluster_name_id == null ? 1 : 0
+  count                     = var.cluster_name_id == null && !var.classic_cluster ? 1 : 0
   name                      = "${var.prefix}-vpc"
   resource_group            = module.resource_group.resource_group_id
   address_prefix_management = "auto"
@@ -26,7 +22,7 @@ resource "ibm_is_vpc" "vpc" {
 }
 
 resource "ibm_is_public_gateway" "gateway" {
-  count          = var.cluster_name_id == null ? 1 : 0
+  count          = var.cluster_name_id == null && !var.classic_cluster ? 1 : 0
   name           = "${var.prefix}-gateway-1"
   vpc            = ibm_is_vpc.vpc[0].id
   resource_group = module.resource_group.resource_group_id
@@ -34,7 +30,7 @@ resource "ibm_is_public_gateway" "gateway" {
 }
 
 resource "ibm_is_subnet" "subnet_zone_1" {
-  count                    = var.cluster_name_id == null ? 1 : 0
+  count                    = var.cluster_name_id == null && !var.classic_cluster ? 1 : 0
   name                     = "${var.prefix}-subnet-1"
   vpc                      = ibm_is_vpc.vpc[0].id
   resource_group           = module.resource_group.resource_group_id
@@ -44,11 +40,28 @@ resource "ibm_is_subnet" "subnet_zone_1" {
 }
 
 ########################################################################################################################
-# OCP VPC cluster (single zone)
+# Classic Infrastructure: VLANs
+########################################################################################################################
+
+resource "ibm_network_vlan" "public_vlan" {
+  count      = var.cluster_name_id == null && var.classic_cluster ? 1 : 0
+  datacenter = var.datacenter
+  type       = "PUBLIC"
+}
+
+resource "ibm_network_vlan" "private_vlan" {
+  count           = var.cluster_name_id == null && var.classic_cluster ? 1 : 0
+  datacenter      = var.datacenter
+  type            = "PRIVATE"
+  router_hostname = replace(ibm_network_vlan.public_vlan[0].router_hostname, "fcr", "bcr")
+}
+
+########################################################################################################################
+# OCP Cluster
 ########################################################################################################################
 
 locals {
-  cluster_vpc_subnets = var.cluster_name_id == null ? {
+  cluster_vpc_subnets = (var.cluster_name_id == null && !var.classic_cluster) ? {
     default = [
       {
         id         = ibm_is_subnet.subnet_zone_1[0].id
@@ -70,7 +83,7 @@ locals {
 }
 
 module "ocp_base" {
-  count                = var.cluster_name_id == null ? 1 : 0
+  count                = var.cluster_name_id == null && !var.classic_cluster ? 1 : 0
   source               = "terraform-ibm-modules/base-ocp-vpc/ibm"
   version              = "3.81.7"
   resource_group_id    = module.resource_group.resource_group_id
@@ -86,14 +99,56 @@ module "ocp_base" {
   ocp_entitlement      = var.ocp_entitlement
 }
 
-data "ibm_container_vpc_cluster" "cluster" {
-  count             = var.cluster_name_id == null ? 0 : 1
-  name              = var.cluster_name_id != null ? var.cluster_name_id : module.ocp_base[0].cluster_name
+# Lookup the current default OpenShift version
+data "ibm_container_cluster_versions" "cluster_versions" {}
+
+locals {
+  default_version = data.ibm_container_cluster_versions.cluster_versions.default_openshift_version
+}
+
+resource "ibm_container_cluster" "classic_cluster" {
+  #checkov:skip=CKV2_IBM_7:Public endpoint is required for testing purposes
+  count                = var.cluster_name_id == null && var.classic_cluster ? 1 : 0
+  name                 = "${var.prefix}-cluster"
+  datacenter           = var.datacenter
+  default_pool_size    = 3
+  hardware             = "shared"
+  kube_version         = local.default_version
+  force_delete_storage = true
+  machine_type         = "b3c.4x16"
+  public_vlan_id       = ibm_network_vlan.public_vlan[0].id
+  private_vlan_id      = ibm_network_vlan.private_vlan[0].id
+  wait_till            = "Normal"
+  resource_group_id    = module.resource_group.resource_group_id
+  tags                 = var.resource_tags
+  entitlement          = var.ocp_entitlement
+
+  timeouts {
+    delete = "2h"
+    create = "3h"
+  }
+}
+
+data "ibm_container_vpc_cluster" "vpc_cluster_data" {
+  count             = var.cluster_name_id != null && !var.classic_cluster ? 1 : 0
+  name              = var.cluster_name_id
   resource_group_id = module.resource_group.resource_group_id
 }
 
+data "ibm_container_cluster" "classic_cluster_data" {
+  count             = var.cluster_name_id != null && var.classic_cluster ? 1 : 0
+  name              = var.cluster_name_id
+  resource_group_id = module.resource_group.resource_group_id
+}
+
+locals {
+  cluster_id = var.cluster_name_id != null ? (var.classic_cluster ? data.ibm_container_cluster.classic_cluster_data[0].id : data.ibm_container_vpc_cluster.vpc_cluster_data[0].name) : (var.classic_cluster ? ibm_container_cluster.classic_cluster[0].id : module.ocp_base[0].cluster_id)
+
+  cluster_name_id_for_config = var.cluster_name_id != null ? (var.classic_cluster ? data.ibm_container_cluster.classic_cluster_data[0].id : data.ibm_container_vpc_cluster.vpc_cluster_data[0].name) : (var.classic_cluster ? ibm_container_cluster.classic_cluster[0].id : module.ocp_base[0].cluster_id)
+}
+
 data "ibm_container_cluster_config" "cluster_config" {
-  cluster_name_id   = var.cluster_name_id == null ? module.ocp_base[0].cluster_id : data.ibm_container_vpc_cluster.cluster[0].name
+  cluster_name_id   = local.cluster_name_id_for_config
   resource_group_id = module.resource_group.resource_group_id
   admin             = true
 }
@@ -104,23 +159,6 @@ resource "time_sleep" "wait_operators" {
   create_duration = "60s"
 }
 
-########################################################################################################################
-# Backup & Recovery Service (BRS)
-########################################################################################################################
-
-module "backup_recovery_instance" {
-  source                = "terraform-ibm-modules/backup-recovery/ibm"
-  version               = "v1.7.2"
-  region                = var.region
-  resource_group_id     = module.resource_group.resource_group_id
-  ibmcloud_api_key      = var.ibmcloud_api_key
-  resource_tags         = var.resource_tags
-  access_tags           = var.access_tags
-  instance_name         = "${var.prefix}-brs-instance"
-  connection_name       = "${var.prefix}-brs-connection"
-  create_new_connection = true
-}
-
 
 ########################################################################################################################
 # Backup & Recovery for IKS/ROKS with Data Source Connector
@@ -129,7 +167,7 @@ module "backup_recovery_instance" {
 
 module "backup_recover_protect_ocp" {
   source                       = "../.."
-  cluster_id                   = var.cluster_name_id == null ? module.ocp_base[0].cluster_id : data.ibm_container_vpc_cluster.cluster[0].id
+  cluster_id                   = local.cluster_id
   cluster_resource_group_id    = module.resource_group.resource_group_id
   cluster_config_endpoint_type = "private"
   add_dsc_rules_to_cluster_sg  = false
@@ -138,9 +176,14 @@ module "backup_recover_protect_ocp" {
   # enable_auto_protect is set to false to avoid issues when running terraform pipelines. in production, this should be set to true.
   enable_auto_protect = false
   # --- B&R Instance ---
+  existing_brs_instance_crn = var.existing_brs_instance_crn
   brs_endpoint_type         = "public"
-  existing_brs_instance_crn = module.backup_recovery_instance.brs_instance_crn
-  brs_connection_name       = module.backup_recovery_instance.connection_name
+  brs_instance_name         = "${var.prefix}-brs-instance"
+  brs_connection_name       = "${var.prefix}-brs-connection-${var.classic_cluster ? "RoksClassic" : "RoksVpc"}"
+  brs_create_new_connection = true
+  region                    = var.region
+  connection_env_type       = var.classic_cluster ? "kRoksClassic" : "kRoksVpc"
+  dsc_storage_class         = var.dsc_storage_class == null ? (var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier") : var.dsc_storage_class
   # --- Backup Policy ---
   policy = {
     name = "${var.prefix}-retention"
@@ -154,4 +197,6 @@ module "backup_recover_protect_ocp" {
     }
     use_default_backup_target = true
   }
+  access_tags   = var.access_tags
+  resource_tags = var.resource_tags
 }

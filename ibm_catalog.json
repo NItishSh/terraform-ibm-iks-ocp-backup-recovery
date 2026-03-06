@@ -94,6 +94,24 @@
               "required": true
             },
             {
+              "key": "provider_visibility",
+              "display_name": "Provider Visibility",
+              "options": [
+                {
+                  "displayname": "Public",
+                  "value": "public"
+                },
+                {
+                  "displayname": "Private",
+                  "value": "private"
+                },
+                {
+                  "displayname": "Public and Private",
+                  "value": "public-and-private"
+                }
+              ]
+            },
+            {
               "key": "cluster_id",
               "display_name": "cluster",
               "custom_config": {
@@ -269,6 +287,56 @@
             {
               "key": "dsc_helm_timeout",
               "display_name": "Helm Timeout (Seconds)"
+            },
+            {
+              "key": "dsc_storage_class",
+              "display_name": "Data Source Connector Storage Class"
+            },
+            {
+              "key": "create_dsc_worker_pool",
+              "display_name": "Create Data Source Connector Worker Pool"
+            },
+            {
+              "key": "brs_create_new_connection",
+              "display_name": "Create New Connection"
+            },
+            {
+              "key": "brs_instance_name",
+              "display_name": "Backup Recovery Service Instance Name"
+            },
+            {
+              "key": "region",
+              "display_name": "Region"
+            },
+            {
+              "key": "access_tags",
+              "display_name": "Access Tags"
+            },
+            {
+              "key": "resource_tags",
+              "display_name": "Resource Tags"
+            },
+            {
+              "key": "connection_env_type",
+              "display_name": "Connection Environment Type",
+              "options": [
+                {
+                  "displayname": "IKS VPC",
+                  "value": "kIksVpc"
+                },
+                {
+                  "displayname": "IKS Classic",
+                  "value": "kIksClassic"
+                },
+                {
+                  "displayname": "ROKS VPC",
+                  "value": "kRoksVpc"
+                },
+                {
+                  "displayname": "ROKS Classic",
+                  "value": "kRoksClassic"
+                }
+              ]
             }
           ],
           "dependencies": [],

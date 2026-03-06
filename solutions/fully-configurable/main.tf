@@ -4,13 +4,19 @@ data "ibm_container_cluster_config" "cluster_config" {
   resource_group_id = var.cluster_resource_group_id
   config_dir        = "${path.module}/kubeconfig"
   endpoint_type     = var.cluster_config_endpoint_type != "default" ? var.cluster_config_endpoint_type : null
+  admin             = true
 }
 
+module "existing_brs_crn_parser" {
+  count   = var.existing_brs_instance_crn != null ? 1 : 0
+  source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
+  version = "1.4.2"
+  crn     = var.existing_brs_instance_crn
+}
 
-########################################################################################################################
-# Backup & Recovery for IKS/ROKS with Data Source Connector
-########################################################################################################################
-
+locals {
+  region = var.existing_brs_instance_crn != null ? module.existing_brs_crn_parser[0].region : var.region
+}
 
 module "protect_cluster" {
   source                       = "../.."
@@ -23,19 +29,29 @@ module "protect_cluster" {
   # --- BRS Instance Details---
   brs_endpoint_type         = var.brs_endpoint_type
   existing_brs_instance_crn = var.existing_brs_instance_crn
+  brs_instance_name         = var.brs_instance_name
+  # --- BRS Connection Details---
   brs_connection_name       = var.brs_connection_name
+  brs_create_new_connection = var.brs_create_new_connection
+  region                    = local.region
+  connection_env_type       = var.connection_env_type
   # --- Backup Policy ---
   policy            = var.policy
   wait_till         = var.wait_till
   wait_till_timeout = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---
-  dsc_chart_uri     = var.dsc_chart_uri
-  dsc_image_version = var.dsc_image_version
-  dsc_name          = var.dsc_name
-  dsc_replicas      = var.dsc_replicas
-  dsc_namespace     = var.dsc_namespace
-  dsc_helm_timeout  = var.dsc_helm_timeout
+  dsc_chart_uri          = var.dsc_chart_uri
+  dsc_image_version      = var.dsc_image_version
+  dsc_name               = var.dsc_name
+  dsc_replicas           = var.dsc_replicas
+  dsc_namespace          = var.dsc_namespace
+  dsc_helm_timeout       = var.dsc_helm_timeout
+  dsc_storage_class      = var.dsc_storage_class
+  create_dsc_worker_pool = var.create_dsc_worker_pool
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
+  # --- Resource Tags ---
+  resource_tags = var.resource_tags
+  access_tags   = var.access_tags
 }

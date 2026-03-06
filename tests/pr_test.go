@@ -26,13 +26,20 @@ import (
 const resourceGroup = "geretain-test-resources"
 const fullyConfigurableTerraformDir = "solutions/fully-configurable"
 const iksExampleDir = "examples/kubernetes"
+const ocpExampleDir = "examples/openshift"
 
 var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "common-dev-assets", "examples", "tests", "reference-architectures"}
 
 var includeFiletypes = []string{".tf", ".yaml", ".py", ".tpl", ".md", ".sh"}
 
-// Define a struct with fields that match the structure of the YAML data
 const yamlLocation = "../common-dev-assets/common-go-assets/common-permanent-resources.yaml"
+
+// Current supported regions
+var validRegions = []string{
+	"us-south",
+	"us-east",
+	"eu-es",
+}
 
 var (
 	sharedInfoSvc      *cloudinfo.CloudInfoService
@@ -97,20 +104,23 @@ func TestMain(m *testing.M) {
 func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Options {
 	tempTerraformDir, err := files.CopyTerraformFolderToTemp(realTerraformDir, prefix)
 	require.NoError(t, err, "Failed to create temporary Terraform folder")
-	region := "us-east"
+
+	region := validRegions[common.CryptoIntn(len(validRegions))]
 
 	existingTerraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: tempTerraformDir,
 		Vars: map[string]interface{}{
-			"prefix":         prefix,
-			"region":         region,
-			"resource_group": resourceGroup,
+			"prefix":                    prefix,
+			"region":                    region,
+			"resource_group":            resourceGroup,
+			"existing_brs_instance_crn": permanentResources["brs_us_east_crn"],
 		},
 		// Set Upgrade to true to ensure latest version of providers and modules are used by terratest.
 		// This is the same as setting the -upgrade=true flag with terraform.
 		Upgrade: true,
 	})
 
+	terraform.Init(t, existingTerraformOptions)
 	terraform.WorkspaceSelectOrNew(t, existingTerraformOptions, prefix)
 	_, err = terraform.InitAndApplyE(t, existingTerraformOptions)
 	require.NoError(t, err, "Init and Apply of temp existing resource failed")
@@ -129,6 +139,37 @@ func cleanupTerraform(t *testing.T, options *terraform.Options, prefix string) {
 	logger.Log(t, "END: Destroy (existing resources)")
 }
 
+func getSchematicTerraformVars(t *testing.T, prefix string, options *testschematic.TestSchematicOptions, existingTerraformOptions *terraform.Options) []testschematic.TestSchematicTerraformVar {
+	return []testschematic.TestSchematicTerraformVar{
+		{Name: "ibmcloud_api_key", Value: options.RequiredEnvironmentVars["TF_VAR_ibmcloud_api_key"], DataType: "string", Secure: true},
+		{Name: "cluster_id", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
+		{Name: "cluster_resource_group_id", Value: terraform.Output(t, existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
+		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
+		{Name: "existing_brs_instance_crn", Value: permanentResources["brs_us_east_crn"], DataType: "string"},
+		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
+		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
+		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
+		{Name: "dsc_replicas", Value: "1", DataType: "number"},
+		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
+		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
+		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
+		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
+		{Name: "kube_type", Value: "openshift", DataType: "string"},
+		{Name: "policy", Value: map[string]interface{}{
+			"name": fmt.Sprintf("%s-policy", prefix),
+			"schedule": map[string]interface{}{
+				"unit":      "Hours",
+				"frequency": 6,
+			},
+			"retention": map[string]interface{}{
+				"duration": 4,
+				"unit":     "Weeks",
+			},
+			"use_default_backup_target": true,
+		}, DataType: "object"},
+	}
+}
+
 func TestRunFullyConfigurableInSchematics(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +180,7 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 	// Provision resources first
 	prefix := fmt.Sprintf("ocp-brs-%s", strings.ToLower(random.UniqueId()))
 	existingTerraformOptions := setupTerraform(t, prefix, "./resources")
+	defer cleanupTerraform(t, existingTerraformOptions, prefix)
 
 	options := testschematic.TestSchematicOptionsDefault(&testschematic.TestSchematicOptions{
 		Testing:               t,
@@ -149,19 +191,13 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 		DeleteWorkspaceOnFail: false,
 	})
 
-	options.TerraformVars = []testschematic.TestSchematicTerraformVar{
-		{Name: "ibmcloud_api_key", Value: options.RequiredEnvironmentVars["TF_VAR_ibmcloud_api_key"], DataType: "string", Secure: true},
-		{Name: "cluster_id", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
-		{Name: "cluster_resource_group_id", Value: terraform.Output(t, existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
-		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
-		{Name: "existing_brs_instance_crn", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_crn"), DataType: "string"},
-		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
-		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
-		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
-		{Name: "dsc_replicas", Value: "1", DataType: "number"},
+	options.TerraformVars = getSchematicTerraformVars(t, prefix, options, existingTerraformOptions)
+	options.IgnoreUpdates = testhelper.Exemptions{
+		List: []string{
+			"module.protect_cluster.kubernetes_namespace_v1.dsc_namespace",
+		},
 	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
-	cleanupTerraform(t, existingTerraformOptions, prefix)
 }
 
 // Upgrade Test does not require KMS encryption
@@ -175,6 +211,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 	// Provision existing resources first
 	prefix := fmt.Sprintf("ocp-existing-%s", strings.ToLower(random.UniqueId()))
 	existingTerraformOptions := setupTerraform(t, prefix, "./resources")
+	defer cleanupTerraform(t, existingTerraformOptions, prefix)
 
 	options := testschematic.TestSchematicOptionsDefault(&testschematic.TestSchematicOptions{
 		Testing:               t,
@@ -185,42 +222,76 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 		DeleteWorkspaceOnFail: false,
 	})
 
-	options.TerraformVars = []testschematic.TestSchematicTerraformVar{
-		{Name: "ibmcloud_api_key", Value: options.RequiredEnvironmentVars["TF_VAR_ibmcloud_api_key"], DataType: "string", Secure: true},
-		{Name: "cluster_id", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
-		{Name: "cluster_resource_group_id", Value: terraform.Output(t, existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
-		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
-		{Name: "existing_brs_instance_crn", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_crn"), DataType: "string"},
-		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
-		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
-		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
-		{Name: "dsc_replicas", Value: "1", DataType: "number"},
+	options.TerraformVars = getSchematicTerraformVars(t, prefix, options, existingTerraformOptions)
+
+	// Exempt expected resource changes from image version update (7.2.16 -> 7.2.17)
+	// and chart rename (cohesity-dsc-chart -> brs-ds-connector-chart)
+	options.IgnoreUpdates = testhelper.Exemptions{
+		List: []string{
+			"module.protect_cluster.helm_release.data_source_connector",
+			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
+			"module.protect_cluster.kubernetes_cluster_role_binding_v1.brsagent_admin",
+			"module.protect_cluster.kubernetes_namespace_v1.dsc_namespace",
+		},
+	}
+	options.IgnoreDestroys = testhelper.Exemptions{
+		List: []string{
+			"module.protect_cluster.kubernetes_secret_v1.brsagent_token",
+			"module.protect_cluster.kubernetes_service_account_v1.brsagent",
+			"module.protect_cluster.time_rotating.token_rotation",
+			"module.protect_cluster.ibm_backup_recovery_connection_registration_token.registration_token",
+		},
 	}
 
 	require.NoError(t, options.RunSchematicUpgradeTest(), "This should not have errored")
-	cleanupTerraform(t, existingTerraformOptions, prefix)
 }
 
-// ibm_backup_recovery_source_registration requires ignoring updates to kubernetes_params fields which will be fixed in future provider versions
-func setupIKSOptions(t *testing.T, prefix string, dir string) *testhelper.TestOptions {
-	region := "us-east"
-
+// Shared setup function for all examples
+func setupOptions(t *testing.T, prefix string, dir string, exemptionList []string) *testhelper.TestOptions {
+	region := validRegions[common.CryptoIntn(len(validRegions))]
 	options := testhelper.TestOptionsDefaultWithVars(&testhelper.TestOptions{
 		Testing:       t,
 		TerraformDir:  dir,
 		Prefix:        prefix,
 		ResourceGroup: resourceGroup,
 		Region:        region,
+		IgnoreUpdates: testhelper.Exemptions{
+			List: exemptionList,
+		},
 	})
+
+	if options.TerraformVars == nil {
+		options.TerraformVars = map[string]interface{}{}
+	}
+	options.TerraformVars["existing_brs_instance_crn"] = permanentResources["brs_us_east_crn"]
+
 	return options
 }
 
 func TestRunIKSExample(t *testing.T) {
 	t.Parallel()
 
-	options := setupIKSOptions(t, "brs-adv", iksExampleDir)
+	options := setupOptions(t, "brs-iks", iksExampleDir, []string{
+		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
+		"ibm_container_vpc_cluster.vpc_cluster[0]",
+		"ibm_container_cluster.cluster[0]",
+	})
 
 	output, err := options.RunTestConsistency()
-	assert.Nil(t, err, "This should not have errored")
+	assert.NoError(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
+}
+
+func TestRunOCPExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupOptions(t, "brs-ocp", ocpExampleDir, []string{
+		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
+		"module.ocp_base[0].ibm_container_vpc_cluster.cluster[0]",
+		"ibm_container_cluster.cluster[0]",
+	})
+
+	output, err := options.RunTestConsistency()
+	assert.NoError(t, err, "This should not have errored")
 	assert.NotNil(t, output, "Expected some output")
 }
