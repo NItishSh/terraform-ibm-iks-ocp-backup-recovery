@@ -184,19 +184,8 @@ module "backup_recover_protect_ocp" {
   region                    = var.region
   connection_env_type       = var.classic_cluster ? "kRoksClassic" : "kRoksVpc"
   dsc_storage_class         = var.dsc_storage_class == null ? (var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier") : var.dsc_storage_class
-  # --- Backup Policy ---
-  policy = {
-    name = "${var.prefix}-retention"
-    schedule = {
-      unit      = "Minutes"
-      frequency = 30
-    }
-    retention = {
-      duration = 1
-      unit     = "Days"
-    }
-    use_default_backup_target = true
-  }
-  access_tags   = var.access_tags
-  resource_tags = var.resource_tags
+  # --- Backup Policy (policy must already exist in the BRS instance) ---
+  auto_protect_policy_name = "${var.prefix}-retention"
+  access_tags              = var.access_tags
+  resource_tags            = var.resource_tags
 }

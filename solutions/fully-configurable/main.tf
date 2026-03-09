@@ -36,9 +36,9 @@ module "protect_cluster" {
   region                    = local.region
   connection_env_type       = var.connection_env_type
   # --- Backup Policy ---
-  policy            = var.policy
-  wait_till         = var.wait_till
-  wait_till_timeout = var.wait_till_timeout
+  auto_protect_policy_name = var.auto_protect_policy_name
+  wait_till                = var.wait_till
+  wait_till_timeout        = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---
   dsc_chart_uri          = var.dsc_chart_uri
   dsc_image_version      = var.dsc_image_version
@@ -51,6 +51,8 @@ module "protect_cluster" {
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
+  # --- Policies ---
+  policies = var.policies
   # --- Resource Tags ---
   resource_tags = var.resource_tags
   access_tags   = var.access_tags

@@ -58,125 +58,10 @@ variable "wait_till_timeout" {
 ##############################################################
 # Backup Related
 ##############################################################
-variable "policy" {
-  type = object({
-    name = string
-    schedule = optional(object({
-      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs
-      frequency = number # required when unit is Minutes/Hours/Days
-
-      # Optional extra layers (allowed even when unit = Minutes)
-      minute_schedule = optional(object({ frequency = number }))
-      hour_schedule   = optional(object({ frequency = number }))
-      day_schedule    = optional(object({ frequency = number }))
-      week_schedule   = optional(object({ day_of_week = list(string) }))
-      month_schedule = optional(object({
-        day_of_week   = optional(list(string))
-        week_of_month = optional(string) # First, Second, Third, Fourth, Last
-        day_of_month  = optional(number)
-      }))
-      year_schedule = optional(object({ day_of_year = string })) # First, Last
-    }))
-
-    retention = optional(object({
-      duration = number
-      unit     = string # Days, Weeks, Months, Years
-
-      data_lock_config = optional(object({
-        mode                           = string # Compliance, Administrative
-        unit                           = string # Days, Weeks, Months, Years
-        duration                       = number
-        enable_worm_on_external_target = optional(bool, false)
-      }))
-    }))
-
-    use_default_backup_target = optional(bool, true)
-
-    # --- Full backup schedule (periodic full backups on top of incrementals) ---
-    full_schedule = optional(object({
-      unit          = string # Days, Weeks, Months, Years, ProtectOnce
-      day_schedule  = optional(object({ frequency = number }))
-      week_schedule = optional(object({ day_of_week = list(string) }))
-      month_schedule = optional(object({
-        day_of_week   = optional(list(string))
-        week_of_month = optional(string)
-        day_of_month  = optional(number)
-      }))
-      year_schedule = optional(object({ day_of_year = string }))
-
-      retention = object({
-        duration = number
-        unit     = string # Days, Weeks, Months, Years
-        data_lock_config = optional(object({
-          mode                           = string
-          unit                           = string
-          duration                       = number
-          enable_worm_on_external_target = optional(bool, false)
-        }))
-      })
-    }))
-
-    # --- Blackout windows (time windows when backups should not run) ---
-    blackout_window = optional(list(object({
-      day = string # Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
-      start_time = object({
-        hour      = number
-        minute    = number
-        time_zone = optional(string, "America/New_York")
-      })
-      end_time = object({
-        hour      = number
-        minute    = number
-        time_zone = optional(string, "America/New_York")
-      })
-    })))
-
-    # --- Run timeouts (prevent hung backup jobs) ---
-    run_timeouts = optional(list(object({
-      timeout_mins = number
-      backup_type  = optional(string, "kRegular") # kRegular, kFull, kLog, kSystem, kHydrateCDP, kStorageArraySnapshot
-    })))
-
-    # --- Extended retention (keep certain snapshots longer) ---
-    extended_retention = optional(list(object({
-      schedule = object({
-        unit      = string # Runs, Days, Weeks, Months, Years
-        frequency = number
-      })
-      retention = object({
-        duration = number
-        unit     = string # Days, Weeks, Months, Years
-        data_lock_config = optional(object({
-          mode                           = string
-          unit                           = string
-          duration                       = number
-          enable_worm_on_external_target = optional(bool, false)
-        }))
-      })
-      run_type  = optional(string, "Regular")
-      config_id = optional(string)
-    })))
-  })
-  default = {
-    name = "default-policy"
-    schedule = {
-      unit      = "Hours"
-      frequency = 6
-    }
-    retention = {
-      duration = 4
-      unit     = "Weeks"
-    }
-    use_default_backup_target = true
-  }
-  validation {
-    condition = (
-      (var.policy.schedule == null && var.policy.retention == null) ||
-      (var.policy.schedule != null && var.policy.retention != null)
-    )
-    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
-  }
-  description = "The backup schedule and retentions of a Protection Policy. [Learn more](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/blob/main/solutions/fully-configurable/DA_docs.md#protection-policy-variable)"
+variable "auto_protect_policy_name" {
+  description = "Name of the existing protection policy to use for auto-protect. Required when enable_auto_protect is true."
+  type        = string
+  default     = null
 }
 
 variable "dsc_chart_uri" {
@@ -358,5 +243,281 @@ variable "connection_env_type" {
   validation {
     condition     = contains(["kIksVpc", "kIksClassic", "kRoksVpc", "kRoksClassic"], var.connection_env_type)
     error_message = "`connection_env_type` must be 'kIksVpc', 'kIksClassic', 'kRoksVpc', or 'kRoksClassic'."
+  }
+}
+variable "policies" {
+  description = "A list of protection policies to create or look up. For new policies, provide `schedule` and `retention`. To reference existing policies by name, omit `schedule` and `retention`."
+  type = list(object({
+    name = string
+
+    use_default_backup_target = optional(bool, true)
+
+    # --- primary_backup_target advanced details ---
+    primary_backup_target_details = optional(object({
+      target_id = number
+      tier_settings = optional(list(object({
+        cloud_platform = string # AWS, Azure, Google, Oracle
+        aws_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        azure_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        google_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        oracle_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+      })))
+    }))
+
+    # --- Standard backup schedule and retention ---
+    schedule = optional(object({
+      unit            = string
+      minute_schedule = optional(object({ frequency = number }))
+      hour_schedule   = optional(object({ frequency = number }))
+      day_schedule    = optional(object({ frequency = number }))
+      week_schedule   = optional(object({ day_of_week = list(string) }))
+      month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+      year_schedule   = optional(object({ day_of_year = string }))
+    }))
+    retention = optional(object({
+      duration         = number
+      unit             = string
+      data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+    }))
+
+    # --- Bare Metal Recovery (BMR) ---
+    bmr = optional(object({
+      schedule = optional(object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      }))
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Continuous Data Protection (CDP) ---
+    cdp = optional(object({
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Database Log Backup ---
+    log = optional(object({
+      schedule = object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      })
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Storage Array Snapshot ---
+    storage_array_snapshot = optional(object({
+      schedule = object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      })
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Blackout windows ---
+    blackout_window = optional(list(object({
+      day = string
+      start_time = object({
+        hour      = number
+        minute    = number
+        time_zone = optional(string, "America/New_York")
+      })
+      end_time = object({
+        hour      = number
+        minute    = number
+        time_zone = optional(string, "America/New_York")
+      })
+    })))
+
+    # --- Run timeouts (prevent hung backup jobs) ---
+    run_timeouts = optional(list(object({
+      timeout_mins = number
+      backup_type  = optional(string, "kRegular")
+    })))
+
+    # --- Extended retention (keep certain snapshots longer) ---
+    extended_retention = optional(list(object({
+      schedule = object({
+        unit      = string
+        frequency = number
+      })
+      retention = object({
+        duration = number
+        unit     = string
+        data_lock_config = optional(object({
+          mode                           = string
+          unit                           = string
+          duration                       = number
+          enable_worm_on_external_target = optional(bool, false)
+        }))
+      })
+      run_type  = optional(string, "Regular")
+      config_id = optional(string)
+    })))
+
+    # --- Cascaded Targets Config ---
+    cascaded_targets_config = optional(object({
+      source_cluster_id = number
+      remote_targets = list(object({
+        archival_targets = optional(list(object({
+          target_id           = number
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+        cloud_spin_targets = optional(list(object({
+          target = object({
+            id = optional(number)
+          })
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+        replication_targets = optional(list(object({
+          target_id           = number
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+      }))
+    }))
+  }))
+  default = [{
+    name = "basic-policy"
+    schedule = {
+      unit         = "Days"
+      day_schedule = { frequency = 1 }
+    }
+    retention = {
+      duration = 2
+      unit     = "Days"
+    }
+  }]
+
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        (p.schedule == null && p.retention == null) ||
+        (p.schedule != null && p.retention != null)
+      )
+    ])
+    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.schedule == null ? true : contains(["Minutes", "Hours", "Days", "Weeks", "Months", "Years"], p.schedule.unit)
+    ])
+    error_message = "Policy schedule unit must be one of: Minutes, Hours, Days, Weeks, Months, Years."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.retention == null ? true : contains(["Days", "Weeks", "Months", "Years"], p.retention.unit)
+    ])
+    error_message = "Policy retention unit must be one of: Days, Weeks, Months, Years."
   }
 }
