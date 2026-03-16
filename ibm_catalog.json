@@ -219,6 +219,20 @@
               "display_name": "DSC Image Version"
             },
             {
+              "key": "dsc_registry",
+              "display_name": "DSC Registry",
+              "options": [
+                {
+                  "displayname": "ICR.IO",
+                  "value": "icr.io"
+                },
+                {
+                  "displayname": "STG.ICR.IO",
+                  "value": "stg.icr.io"
+                }
+              ]
+            },
+            {
               "key": "brs_connection_name",
               "display_name": "Backup Recovery Service Connection Name"
             },
