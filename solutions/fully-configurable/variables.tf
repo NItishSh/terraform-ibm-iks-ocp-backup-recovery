@@ -67,7 +67,7 @@ variable "auto_protect_policy_name" {
 variable "dsc_chart_uri" {
   description = "The full OCI registry URI for the Data Source Connector Helm chart, including the digest."
   type        = string
-  default     = "oci://icr.io/ext/brs/brs-ds-connector-chart:7.2.17-release-20260108-ed857f1c@sha256:0b3e84175cb8c1b2608e99e65fc72f2d5c4264dc0a0939ad98e089cc2bb7288e"
+  default     = "oci://icr.io/ext/brs/brs-ds-connector-chart:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
   nullable    = false
 }
 
@@ -126,7 +126,7 @@ variable "create_dsc_worker_pool" {
 variable "dsc_image_version" {
   description = "Container image for the Data Source Connector."
   type        = string
-  default     = "icr.io/ext/brs/brs-ds-connector:7.2.17-release-20260108-ed857f1c@sha256:560ff2170c880dc19712e0f37ba1575240e462f5e2a2ecbc4ecb791aa471f2d0"
+  default     = "icr.io/ext/brs/brs-ds-connector:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
   nullable    = false
   validation {
     condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
@@ -173,11 +173,11 @@ variable "registration_images" {
     init_container              = optional(string, null)
   })
   default = {
-    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.17@sha256:2b9e69f37752c6f8758b8de61b4c4ec6ccc60083d23211f59b07780069e9ddf8"
+    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.18@sha256:f347698eb6180645d8c1b71d69a9fc40bb7c0bd14e5cdece9b7da79af74e8262"
     velero                      = "icr.io/ext/brs/oadp-velero:1.3.8@sha256:2d0014471b5c0e46cf96ac452069b9fa1ebbffd1d50a8ffecb2b443dbfbd4b00"
     velero_aws_plugin           = "icr.io/ext/brs/oadp-velero-plugin-for-aws:1.3.8@sha256:3adcd0bfa963f980ad41dbff05c44c4b11d6b07e493a9c53a0ee3483a905039d"
     velero_openshift_plugin     = "icr.io/ext/brs/oadp-velero-plugin-for-openshift:1.4.7@sha256:8b5dcea0fc837e5547c253f355d71b19f825eed6fac1e19c40af44b19fd7259a"
-    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.17@sha256:d7b0e02b267f27aa41c2879bb5c8dcafe9e2e6e0a825fa9e4116a7cd41403983"
+    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.18@sha256:629fdf6852a9583674c41fc1ccbab3006c737067f5dccafbee2fe36fbc6ee748"
   }
   description = "The images required for backup and recovery registration."
   nullable    = false
