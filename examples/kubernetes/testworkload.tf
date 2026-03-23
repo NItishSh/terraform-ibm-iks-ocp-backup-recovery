@@ -26,7 +26,8 @@ resource "kubernetes_persistent_volume_claim_v1" "test_app_pvc" {
     name      = "app-with-vpc-block-pvc"
     namespace = kubernetes_namespace_v1.workload_ns.metadata[0].name
     labels = {
-      app = "app-with-vpc-block-pvc"
+      app              = "app-with-vpc-block-pvc"
+      backup-enabled   = "true"
     }
   }
 
@@ -70,7 +71,8 @@ resource "kubernetes_deployment_v1" "test_app_with_pvc" {
     template {
       metadata {
         labels = {
-          app = "app-with-vpc-block-pvc"
+          app            = "app-with-vpc-block-pvc"
+          backup-enabled = "true"
         }
       }
 

@@ -231,6 +231,12 @@ module "backup_recover_protect_iks" {
             "secrets"
           ]
 
+          include_pvcs = [
+            {
+              name = kubernetes_persistent_volume_claim_v1.test_app_pvc.metadata[0].name
+            }
+          ]
+
           # DO NOT include excluded_resources when using included_resources
 
           # Explicitly set include_params to null to prevent API from returning empty block
@@ -308,20 +314,89 @@ module "backup_recover_protect_iks" {
       ]
     }
   ]
-  # recoveries = [{
-  #   name                 = "restore-production-namespace"
-  #   snapshot_environment = "kKubernetes"
-  #   kubernetes_params = {
-  #     recovery_action = "RecoverNamespaces"
-  #     objects = [{
-  #       snapshot_id         = "snapshot-123"
-  #       protection_group_id = "pg-456"
-  #     }]
-  #   }
-  # }]
+
   # ========================================
-  depends_on = [
-    time_sleep.wait_for_workload,
-    kubernetes_namespace_v1.workload_ns,
-  ]
+  # Recovery Configuration
+  # ========================================
+  recoveries = length(var.recoveries) > 0 ? var.recoveries : (
+    var.recovery_mode == "selective" ? [
+      {
+        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
+          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
+          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
+          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
+          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
+          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
+        )
+        snapshot_environment = "kKubernetes"
+        kubernetes_params = {
+          recovery_action               = var.recovery_action
+          target_source_registration_id = null
+          objects = [
+            {
+              snapshot_id         = var.recovery_snapshot_id
+              protection_group_id = var.recovery_protection_group_id
+            }
+          ]
+        }
+      }
+    ] : var.recovery_mode == "full" ? [
+      {
+        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
+          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
+          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
+          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
+          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
+          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
+        )
+        snapshot_environment = "kKubernetes"
+        kubernetes_params = {
+          recovery_action               = var.recovery_action
+          target_source_registration_id = null
+          objects = [
+            for snapshot_id in var.recovery_snapshot_ids : {
+              snapshot_id         = snapshot_id
+              protection_group_id = var.recovery_protection_group_id
+            }
+          ]
+        }
+      }
+    ] : var.recovery_mode == "cross" ? [
+      {
+        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
+          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
+          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
+          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
+          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
+          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
+        )
+        snapshot_environment = "kKubernetes"
+        kubernetes_params = {
+          recovery_action               = var.recovery_action
+          target_source_registration_id = var.recovery_target_source_registration_id
+          objects = [
+            {
+              snapshot_id         = var.recovery_snapshot_id
+              protection_group_id = var.recovery_protection_group_id
+            }
+          ]
+        }
+      }
+    ] : var.enable_auto_recovery ? [
+      {
+        name                 = var.auto_recovery_name
+        snapshot_environment = "kKubernetes"
+        kubernetes_params = {
+          recovery_action               = "RecoverNamespaces"
+          target_source_registration_id = null
+          objects = [
+            {
+              snapshot_id         = var.auto_recovery_snapshot_id
+              protection_group_id = var.auto_recovery_protection_group_id
+            }
+          ]
+        }
+      }
+    ] : []
+  )
 }

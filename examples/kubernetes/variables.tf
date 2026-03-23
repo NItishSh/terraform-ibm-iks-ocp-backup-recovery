@@ -74,3 +74,101 @@ variable "datacenter" {
   description = "The classic infrastructure datacenter where the cluster is created. Only used if classic_cluster is true."
   default     = "dal10"
 }
+
+variable "recovery_mode" {
+  type        = string
+  description = "One-place recovery mode: disabled, selective, full, or cross. Cross restores to a different registered cluster."
+  default     = "disabled"
+
+  validation {
+    condition     = contains(["disabled", "selective", "full", "cross"], var.recovery_mode)
+    error_message = "recovery_mode must be one of: disabled, selective, full, cross."
+  }
+}
+
+variable "recovery_name" {
+  type        = string
+  description = "Optional recovery task name. If null, the example generates one from prefix and mode."
+  default     = null
+}
+
+variable "recovery_action" {
+  type        = string
+  description = "Kubernetes recovery action. Use RecoverNamespaces, RecoverPVs, or RecoverApps."
+  default     = "RecoverNamespaces"
+}
+
+variable "recovery_snapshot_id" {
+  type        = string
+  description = "Snapshot ID for selective or cross recovery mode."
+  default     = null
+
+  validation {
+    condition = (
+      !contains(["selective", "cross"], var.recovery_mode) ||
+      try(trimspace(var.recovery_snapshot_id), "") != ""
+    )
+    error_message = "recovery_snapshot_id is required when recovery_mode is selective or cross."
+  }
+}
+
+variable "recovery_snapshot_ids" {
+  type        = list(string)
+  description = "Snapshot IDs for full recovery mode."
+  default     = []
+
+  validation {
+    condition     = var.recovery_mode != "full" || length(var.recovery_snapshot_ids) > 0
+    error_message = "recovery_snapshot_ids must contain at least one snapshot ID when recovery_mode is full."
+  }
+}
+
+variable "recovery_protection_group_id" {
+  type        = string
+  description = "Optional protection group ID filter passed to recovery objects."
+  default     = null
+}
+
+variable "recovery_target_source_registration_id" {
+  type        = string
+  description = "Target source registration ID for cross recovery mode (format tenant::id or tenant/::id)."
+  default     = null
+
+  validation {
+    condition = (
+      var.recovery_mode != "cross" ||
+      try(trimspace(var.recovery_target_source_registration_id), "") != ""
+    )
+    error_message = "recovery_target_source_registration_id is required when recovery_mode is cross."
+  }
+}
+
+variable "enable_auto_recovery" {
+  type        = bool
+  description = "Set to true to automatically run namespace recovery from this same example once a snapshot is available."
+  default     = false
+}
+
+variable "auto_recovery_name" {
+  type        = string
+  description = "Recovery task name for automatic recovery mode."
+  default     = "kubernetes-example-auto-recovery"
+}
+
+variable "auto_recovery_snapshot_id" {
+  type        = string
+  description = "Snapshot ID used by automatic recovery mode. Required when enable_auto_recovery is true and recoveries is empty."
+  default     = null
+}
+
+variable "auto_recovery_protection_group_id" {
+  type        = string
+  description = "Optional protection group ID filter for automatic recovery snapshot selection. If null, first created protection group is used."
+  default     = null
+}
+
+variable "recoveries" {
+  type        = any
+  description = "Optional advanced recoveries list passed directly to module input recoveries. If set, this takes precedence over built-in recovery variables."
+  default     = []
+}
