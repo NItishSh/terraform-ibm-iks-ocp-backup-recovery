@@ -784,8 +784,7 @@ variable "recoveries" {
     }
   }]
 
-  Note: The current provider version supports basic recovery operations. Advanced features
-  like namespace_mapping, volume_info_vec, and cross-cluster recovery may require provider updates.
+  Supports same-cluster and cross-cluster Kubernetes recovery.
   EOT
   type = list(object({
     name                 = string
@@ -794,6 +793,7 @@ variable "recoveries" {
     # Kubernetes-specific recovery parameters
     kubernetes_params = optional(object({
       recovery_action = string # RecoverNamespaces, RecoverPVs, RecoverApps
+      target_source_registration_id = optional(string)
 
       objects = list(object({
         snapshot_id           = string

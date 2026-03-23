@@ -47,6 +47,16 @@ locals {
   resolved_policy_ids = {
     for k, v in data.ibm_backup_recovery_protection_policies.existing_policies : k => v.policies[0].id
   }
+
+  # Parse target source registration ID for cross-cluster recovery if provided.
+  recovery_target_source_ids = {
+    for recovery in var.recoveries : recovery.name => try(
+      tonumber(split("::", recovery.kubernetes_params.target_source_registration_id)[1]),
+      tonumber(split("/", recovery.kubernetes_params.target_source_registration_id)[2]),
+      null
+    )
+    if try(trimspace(recovery.kubernetes_params.target_source_registration_id), "") != ""
+  }
 }
 
 ##############################################################################
@@ -801,15 +811,36 @@ resource "ibm_backup_recovery" "recover_snapshot" {
     content {
       recovery_action = kubernetes_params.value.recovery_action
 
-      # Objects to recover
-      dynamic "objects" {
-        for_each = kubernetes_params.value.objects
+      dynamic "recover_namespace_params" {
+        for_each = kubernetes_params.value.recovery_action == "RecoverNamespaces" ? [1] : []
         content {
-          snapshot_id           = objects.value.snapshot_id
-          point_in_time_usecs   = objects.value.point_in_time_usecs
-          protection_group_id   = objects.value.protection_group_id
-          protection_group_name = objects.value.protection_group_name
-          recover_from_standby  = objects.value.recover_from_standby
+          target_environment = "kKubernetes"
+
+          kubernetes_target_params {
+            dynamic "objects" {
+              for_each = kubernetes_params.value.objects
+              content {
+                snapshot_id           = objects.value.snapshot_id
+                point_in_time_usecs   = objects.value.point_in_time_usecs
+                protection_group_id   = objects.value.protection_group_id
+                protection_group_name = objects.value.protection_group_name
+                recover_from_standby  = objects.value.recover_from_standby
+              }
+            }
+
+            recovery_target_config {
+              recover_to_new_source = contains(keys(local.recovery_target_source_ids), each.key)
+
+              dynamic "new_source_config" {
+                for_each = contains(keys(local.recovery_target_source_ids), each.key) ? [1] : []
+                content {
+                  source {
+                    id = local.recovery_target_source_ids[each.key]
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
