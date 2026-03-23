@@ -187,6 +187,12 @@ resource "ibm_container_vpc_worker_pool" "data_source_connector" {
   labels = {
     "dedicated" = "data-source-connector"
   }
+
+  taints {
+    key    = "dedicated"
+    value  = "data-source-connector"
+    effect = "NoSchedule"
+  }
 }
 
 ##############################################################################
@@ -237,6 +243,14 @@ resource "helm_release" "data_source_connector" {
       nodeSelector = local.is_vpc && var.create_dsc_worker_pool ? {
         "dedicated" = "data-source-connector"
       } : {}
+      tolerations = local.is_vpc && var.create_dsc_worker_pool ? [
+        {
+          key      = "dedicated"
+          operator = "Equal"
+          value    = "data-source-connector"
+          effect   = "NoSchedule"
+        }
+      ] : []
       volumeClaimTemplate = {
         storageClass = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
       }
