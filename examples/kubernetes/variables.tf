@@ -77,12 +77,12 @@ variable "datacenter" {
 
 variable "recovery_mode" {
   type        = string
-  description = "One-place recovery mode: disabled, selective, full, or cross. Cross restores to a different registered cluster."
+  description = "One-place recovery mode: disabled, selective, full, cross, or auto. Auto triggers a run, discovers latest namespace snapshot, and restores in the same apply."
   default     = "disabled"
 
   validation {
-    condition     = contains(["disabled", "selective", "full", "cross"], var.recovery_mode)
-    error_message = "recovery_mode must be one of: disabled, selective, full, cross."
+    condition     = contains(["disabled", "selective", "full", "cross", "auto"], var.recovery_mode)
+    error_message = "recovery_mode must be one of: disabled, selective, full, cross, auto."
   }
 }
 
@@ -100,38 +100,25 @@ variable "recovery_action" {
 
 variable "recovery_snapshot_id" {
   type        = string
-  description = "Snapshot ID for selective or cross recovery mode."
+  description = "Optional legacy/manual snapshot ID override. Built-in selective, full, cross, and auto modes now discover snapshots automatically."
   default     = null
-
-  validation {
-    condition = (
-      !contains(["selective", "cross"], var.recovery_mode) ||
-      try(trimspace(var.recovery_snapshot_id), "") != ""
-    )
-    error_message = "recovery_snapshot_id is required when recovery_mode is selective or cross."
-  }
 }
 
 variable "recovery_snapshot_ids" {
   type        = list(string)
-  description = "Snapshot IDs for full recovery mode."
+  description = "Optional legacy/manual snapshot ID list override. Built-in full mode now discovers the latest compatible snapshot set automatically."
   default     = []
-
-  validation {
-    condition     = var.recovery_mode != "full" || length(var.recovery_snapshot_ids) > 0
-    error_message = "recovery_snapshot_ids must contain at least one snapshot ID when recovery_mode is full."
-  }
 }
 
 variable "recovery_protection_group_id" {
   type        = string
-  description = "Optional protection group ID filter passed to recovery objects."
+  description = "Optional protection group ID filter used during snapshot discovery and passed to recovery objects. If null, the first protection group created by this example is used."
   default     = null
 }
 
 variable "recovery_target_source_registration_id" {
   type        = string
-  description = "Target source registration ID for cross recovery mode (format tenant::id or tenant/::id)."
+  description = "Target source registration ID for cross recovery mode (format tenant::id or tenant/::id). This remains required because the destination cluster cannot be inferred safely."
   default     = null
 
   validation {
@@ -143,28 +130,32 @@ variable "recovery_target_source_registration_id" {
   }
 }
 
-variable "enable_auto_recovery" {
+variable "auto_run_backup_before_recovery" {
   type        = bool
-  description = "Set to true to automatically run namespace recovery from this same example once a snapshot is available."
-  default     = false
+  description = "When recovery_mode is auto, trigger an on-demand backup run before discovering snapshot IDs for recovery."
+  default     = true
 }
 
-variable "auto_recovery_name" {
+variable "auto_recovery_run_type" {
   type        = string
-  description = "Recovery task name for automatic recovery mode."
-  default     = "kubernetes-example-auto-recovery"
+  description = "Backup run type used by auto mode when auto_run_backup_before_recovery is true."
+  default     = "kRegular"
+
+  validation {
+    condition     = contains(["kRegular", "kFull", "kLog", "kSystem", "kHydrateCDP", "kStorageArraySnapshot"], var.auto_recovery_run_type)
+    error_message = "auto_recovery_run_type must be one of: kRegular, kFull, kLog, kSystem, kHydrateCDP, kStorageArraySnapshot."
+  }
 }
 
-variable "auto_recovery_snapshot_id" {
-  type        = string
-  description = "Snapshot ID used by automatic recovery mode. Required when enable_auto_recovery is true and recoveries is empty."
-  default     = null
-}
+variable "auto_recovery_wait_seconds" {
+  type        = number
+  description = "Wait duration in seconds after on-demand backup trigger before snapshot discovery in auto mode."
+  default     = 300
 
-variable "auto_recovery_protection_group_id" {
-  type        = string
-  description = "Optional protection group ID filter for automatic recovery snapshot selection. If null, first created protection group is used."
-  default     = null
+  validation {
+    condition     = var.auto_recovery_wait_seconds >= 30
+    error_message = "auto_recovery_wait_seconds must be at least 30 seconds."
+  }
 }
 
 variable "recoveries" {

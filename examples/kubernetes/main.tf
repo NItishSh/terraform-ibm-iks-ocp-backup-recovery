@@ -315,88 +315,191 @@ module "backup_recover_protect_iks" {
     }
   ]
 
-  # ========================================
-  # Recovery Configuration
-  # ========================================
-  recoveries = length(var.recoveries) > 0 ? var.recoveries : (
-    var.recovery_mode == "selective" ? [
-      {
-        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
-          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
-          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
-          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
-          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
-          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
-        )
-        snapshot_environment = "kKubernetes"
-        kubernetes_params = {
-          recovery_action               = var.recovery_action
-          target_source_registration_id = null
-          objects = [
-            {
-              snapshot_id         = var.recovery_snapshot_id
-              protection_group_id = var.recovery_protection_group_id
-            }
-          ]
-        }
-      }
-    ] : var.recovery_mode == "full" ? [
-      {
-        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
-          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
-          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
-          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
-          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
-          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
-        )
-        snapshot_environment = "kKubernetes"
-        kubernetes_params = {
-          recovery_action               = var.recovery_action
-          target_source_registration_id = null
-          objects = [
-            for snapshot_id in var.recovery_snapshot_ids : {
-              snapshot_id         = snapshot_id
-              protection_group_id = var.recovery_protection_group_id
-            }
-          ]
-        }
-      }
-    ] : var.recovery_mode == "cross" ? [
-      {
-        name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
-          "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
-          formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
-          tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
-          formatdate("mm", timeadd(plantimestamp(), "5h30m")),
-          formatdate("AA", timeadd(plantimestamp(), "5h30m"))
-        )
-        snapshot_environment = "kKubernetes"
-        kubernetes_params = {
-          recovery_action               = var.recovery_action
-          target_source_registration_id = var.recovery_target_source_registration_id
-          objects = [
-            {
-              snapshot_id         = var.recovery_snapshot_id
-              protection_group_id = var.recovery_protection_group_id
-            }
-          ]
-        }
-      }
-    ] : var.enable_auto_recovery ? [
-      {
-        name                 = var.auto_recovery_name
-        snapshot_environment = "kKubernetes"
-        kubernetes_params = {
-          recovery_action               = "RecoverNamespaces"
-          target_source_registration_id = null
-          objects = [
-            {
-              snapshot_id         = var.auto_recovery_snapshot_id
-              protection_group_id = var.auto_recovery_protection_group_id
-            }
-          ]
-        }
-      }
-    ] : []
+  # Use module-level recoveries only when the caller explicitly passes them.
+  recoveries = length(var.recoveries) > 0 ? var.recoveries : []
+}
+
+# ========================================
+# Dynamic Recovery Discovery and Execution
+# ========================================
+
+locals {
+  created_protection_group_id = try(module.backup_recover_protect_iks.protection_group_ids["${var.prefix}-protection-group"], null)
+  should_run_builtin_recovery = length(var.recoveries) == 0 && contains(["auto", "selective", "full", "cross"], var.recovery_mode)
+}
+
+resource "time_sleep" "wait_for_protection_group_visibility" {
+  count = local.should_run_builtin_recovery ? 1 : 0
+
+  depends_on      = [module.backup_recover_protect_iks]
+  create_duration = "20s"
+}
+
+resource "ibm_backup_recovery_protection_group_run_request" "recovery_mode_backup_run" {
+  count = local.should_run_builtin_recovery && var.recovery_mode == "auto" && var.auto_run_backup_before_recovery ? 1 : 0
+
+  x_ibm_tenant_id      = module.backup_recover_protect_iks.brs_tenant_id
+  instance_id          = module.backup_recover_protect_iks.brs_instance_guid
+  region               = module.backup_recover_protect_iks.brs_instance_region
+  endpoint_type        = module.backup_recover_protect_iks.brs_endpoint_type
+  group_id = local.resolved_recovery_protection_group_id_api
+  run_type = var.auto_recovery_run_type
+
+  depends_on = [time_sleep.wait_for_protection_group_visibility]
+}
+
+resource "time_sleep" "wait_for_recovery_mode_snapshot_window" {
+  count = local.should_run_builtin_recovery && var.recovery_mode == "auto" && var.auto_run_backup_before_recovery ? 1 : 0
+
+  depends_on      = [ibm_backup_recovery_protection_group_run_request.recovery_mode_backup_run]
+  create_duration = format("%ss", var.auto_recovery_wait_seconds)
+}
+
+data "ibm_backup_recovery_protection_groups" "all" {
+  x_ibm_tenant_id = module.backup_recover_protect_iks.brs_tenant_id
+  instance_id     = module.backup_recover_protect_iks.brs_instance_guid
+  region          = module.backup_recover_protect_iks.brs_instance_region
+  endpoint_type   = module.backup_recover_protect_iks.brs_endpoint_type
+
+  depends_on = [module.backup_recover_protect_iks]
+}
+
+locals {
+  discovered_recovery_protection_group = [for pg in data.ibm_backup_recovery_protection_groups.all.protection_groups : pg if pg.name == "${var.prefix}-protection-group"]
+  resolved_recovery_protection_group_id = var.recovery_protection_group_id != null ? var.recovery_protection_group_id : (
+    local.created_protection_group_id != null ? local.created_protection_group_id : (
+      length(local.discovered_recovery_protection_group) > 0 ? local.discovered_recovery_protection_group[0].id : null
+    )
   )
+  resolved_recovery_protection_group_id_api = local.resolved_recovery_protection_group_id != null ? try(split("::", local.resolved_recovery_protection_group_id)[1], local.resolved_recovery_protection_group_id) : null
+}
+
+data "ibm_backup_recovery_protection_group_runs" "latest" {
+  count = local.should_run_builtin_recovery ? 1 : 0
+
+  x_ibm_tenant_id              = module.backup_recover_protect_iks.brs_tenant_id
+  instance_id                  = module.backup_recover_protect_iks.brs_instance_guid
+  region                       = module.backup_recover_protect_iks.brs_instance_region
+  endpoint_type                = module.backup_recover_protect_iks.brs_endpoint_type
+  protection_group_id          = local.resolved_recovery_protection_group_id_api
+  include_object_details       = true
+  num_runs                     = 5
+  exclude_non_restorable_runs  = true
+
+  depends_on = [
+    module.backup_recover_protect_iks,
+    time_sleep.wait_for_recovery_mode_snapshot_window
+  ]
+}
+
+locals {
+  manual_snapshot_ids = length(var.recovery_snapshot_ids) > 0 ? var.recovery_snapshot_ids : (
+    try(trimspace(var.recovery_snapshot_id), "") != "" ? [var.recovery_snapshot_id] : []
+  )
+  discovered_snapshot_ids = distinct(compact(flatten([
+    for run in(length(data.ibm_backup_recovery_protection_group_runs.latest) > 0 ? data.ibm_backup_recovery_protection_group_runs.latest[0].runs : []) : concat(
+      flatten([
+        for obj in try(run.objects, []) : flatten([
+          for lsi in try(obj.local_snapshot_info, []) : [
+            for si in try(lsi.snapshot_info, []) : try(si.snapshot_id, null)
+          ]
+        ])
+      ]),
+      flatten([
+        for obj in try(run.objects, []) : flatten([
+          for ai in try(obj.archival_info, []) : [
+            for atr in try(ai.archival_target_results, []) : try(atr.snapshot_id, null)
+          ]
+        ])
+      ]),
+      flatten([
+        for lbi in try(run.local_backup_info, []) : [try(lbi.snapshot_id, null)]
+      ]),
+      flatten([
+        for ai in try(run.archival_info, []) : [
+          for atr in try(ai.archival_target_results, []) : try(atr.snapshot_id, null)
+        ]
+      ])
+    )
+  ])))
+  discovered_latest_snapshot_id = length(local.discovered_snapshot_ids) > 0 ? local.discovered_snapshot_ids[0] : null
+  effective_snapshot_ids = length(local.manual_snapshot_ids) > 0 ? local.manual_snapshot_ids : (
+    local.discovered_latest_snapshot_id != null ? [local.discovered_latest_snapshot_id] : []
+  )
+  effective_recovery_name = try(trimspace(var.recovery_name), "") != "" ? var.recovery_name : format(
+    "Recover_Kubernetes_Namespaces_%s_%d_%s_%s",
+    formatdate("MMM_D_YYYY", timeadd(plantimestamp(), "5h30m")),
+    tonumber(formatdate("HH", timeadd(plantimestamp(), "5h30m"))),
+    formatdate("mm", timeadd(plantimestamp(), "5h30m")),
+    formatdate("AA", timeadd(plantimestamp(), "5h30m"))
+  )
+  recovery_target_source_id = try(
+    tonumber(split("::", var.recovery_target_source_registration_id)[1]),
+    tonumber(split("/", var.recovery_target_source_registration_id)[2]),
+    null
+  )
+}
+
+resource "ibm_backup_recovery" "discovered_recover_snapshot" {
+  count = local.should_run_builtin_recovery ? 1 : 0
+
+  x_ibm_tenant_id      = module.backup_recover_protect_iks.brs_tenant_id
+  name                 = local.effective_recovery_name
+  snapshot_environment = "kKubernetes"
+  endpoint_type        = module.backup_recover_protect_iks.brs_endpoint_type
+  instance_id          = module.backup_recover_protect_iks.brs_instance_guid
+  region               = module.backup_recover_protect_iks.brs_instance_region
+
+  kubernetes_params {
+    recovery_action = var.recovery_action
+
+    recover_namespace_params {
+      target_environment = "kKubernetes"
+
+      kubernetes_target_params {
+        dynamic "objects" {
+          for_each = local.effective_snapshot_ids
+          content {
+            snapshot_id         = objects.value
+            protection_group_id = local.resolved_recovery_protection_group_id_api
+          }
+        }
+
+        recovery_target_config {
+          recover_to_new_source = var.recovery_mode == "cross"
+
+          dynamic "new_source_config" {
+            for_each = var.recovery_mode == "cross" ? [1] : []
+            content {
+              source {
+                id = local.recovery_target_source_id
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    module.backup_recover_protect_iks,
+    data.ibm_backup_recovery_protection_group_runs.latest
+  ]
+
+  lifecycle {
+    precondition {
+      condition     = local.resolved_recovery_protection_group_id_api != null
+      error_message = "No protection group ID resolved for built-in recovery mode."
+    }
+
+    precondition {
+      condition     = length(local.effective_snapshot_ids) > 0
+      error_message = "No snapshot IDs available for built-in recovery mode. Increase auto_recovery_wait_seconds or provide recovery_snapshot_id manually."
+    }
+
+    precondition {
+      condition     = var.recovery_mode != "cross" || local.recovery_target_source_id != null
+      error_message = "Could not parse recovery_target_source_registration_id. Expected format tenant::id or tenant/::id."
+    }
+  }
 }
