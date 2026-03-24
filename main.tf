@@ -362,7 +362,22 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
     client_private_key                         = chomp(kubernetes_secret_v1.brsagent_token.data["token"])
   }
 
+  depends_on = [
+    helm_release.data_source_connector,
+    time_sleep.wait_before_helm_destroy
+  ]
+}
+
+# Wait 5 minutes during destroy to allow namespace cleanup before destroying helm release
+resource "time_sleep" "wait_before_helm_destroy" {
   depends_on = [helm_release.data_source_connector]
+
+  destroy_duration = "5m"
+
+  triggers = {
+    # Ensure this resource is recreated when the helm release changes
+    helm_release_id = helm_release.data_source_connector.id
+  }
 }
 
 resource "time_sleep" "wait_for_source_refresh" {
