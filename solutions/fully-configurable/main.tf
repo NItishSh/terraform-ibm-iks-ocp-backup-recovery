@@ -67,13 +67,19 @@ module "protect_cluster" {
 ########################################################################################################################
 resource "null_resource" "cleanup_brs_agent_resources" {
   triggers = {
-    kubeconfig_file = basename(data.ibm_container_cluster_config.cluster_config.config_file_path)
+    # Store path relative to module dir so it resolves correctly across Schematics apply/destroy runs.
+    # e.g. "kubeconfig/b5701dbddc.../config.yml" — preserves the cluster-specific subdirectory.
+    kubeconfig_rel = replace(
+      data.ibm_container_cluster_config.cluster_config.config_file_path,
+      "${path.module}/",
+      ""
+    )
   }
 
   provisioner "local-exec" {
     when = destroy
     environment = {
-      KUBECONFIG = "kubeconfig/${self.triggers.kubeconfig_file}"
+      KUBECONFIG = self.triggers.kubeconfig_rel
     }
     command = <<-EOT
       echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
