@@ -89,50 +89,35 @@ resource "null_resource" "cleanup_brs_agent_resources" {
       fi
 
       # Build a temporary kubeconfig from stored cluster credentials.
-      # Use PEM files (not *-data fields) so raw certificate/key values work reliably.
+      # Use PEM files plus explicit kubectl TLS flags so we do not need inline kubeconfig YAML.
       TMPDIR=$(mktemp -d /tmp/brs-cleanup-XXXXXX)
-      TMPKUBE="$TMPDIR/kubeconfig.yml"
       trap 'rm -rf "$TMPDIR"' EXIT
 
       printf '%s\n' "${self.triggers.kube_ca}" > "$TMPDIR/ca.pem"
       printf '%s\n' "${self.triggers.kube_cert}" > "$TMPDIR/client.crt"
       printf '%s\n' "${self.triggers.kube_key}" > "$TMPDIR/client.key"
 
-      cat > "$TMPKUBE" << KUBECFG
-apiVersion: v1
-clusters:
-- cluster:
-    certificate-authority: $TMPDIR/ca.pem
-    server: ${self.triggers.kube_host}
-  name: cluster
-contexts:
-- context:
-    cluster: cluster
-    user: admin
-  name: admin
-current-context: admin
-kind: Config
-users:
-- name: admin
-  user:
-    client-certificate: $TMPDIR/client.crt
-    client-key: $TMPDIR/client.key
-KUBECFG
+      kctl() {
+        kubectl \
+          --server="${self.triggers.kube_host}" \
+          --certificate-authority="$TMPDIR/ca.pem" \
+          --client-certificate="$TMPDIR/client.crt" \
+          --client-key="$TMPDIR/client.key" \
+          "$@"
+      }
 
-      export KUBECONFIG="$TMPKUBE"
-
-      if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
+      if ! kctl version --request-timeout=15s >/dev/null 2>&1; then
         echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
         exit 0
       fi
 
       # Delete by runtime-generated naming pattern.
-      kubectl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
-        [ -n "$ns" ] && kubectl delete namespace "$ns" --ignore-not-found=true
+      kctl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
+        [ -n "$ns" ] && kctl delete namespace "$ns" --ignore-not-found=true
       done
 
-      kubectl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
-        [ -n "$crb" ] && kubectl delete clusterrolebinding "$crb" --ignore-not-found=true
+      kctl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
+        [ -n "$crb" ] && kctl delete clusterrolebinding "$crb" --ignore-not-found=true
       done
 
       echo "Cleanup complete."
