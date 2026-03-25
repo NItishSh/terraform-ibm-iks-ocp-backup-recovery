@@ -57,3 +57,51 @@ module "protect_cluster" {
   resource_tags = var.resource_tags
   access_tags   = var.access_tags
 }
+
+########################################################################################################################
+# Cleanup BRS-agent runtime resources on destroy
+# BRS agent creates a namespace and ClusterRoleBinding (brs-backup-agent-<uuid>) that Terraform does not manage.
+# This null_resource runs a local-exec on destroy to clean them up.
+# The kubeconfig path is stored in triggers at apply time so it is available during destroy
+# (destroy provisioners cannot reference data sources directly).
+########################################################################################################################
+resource "null_resource" "cleanup_brs_agent_resources" {
+  triggers = {
+    kubeconfig = data.ibm_container_cluster_config.cluster_config.config_file_path
+  }
+
+  provisioner "local-exec" {
+    when = destroy
+    environment = {
+      KUBECONFIG = self.triggers.kubeconfig
+    }
+    command = <<-EOT
+      echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
+
+      if ! command -v kubectl >/dev/null 2>&1; then
+        echo "kubectl not found; skipping BRS-agent cleanup."
+        exit 0
+      fi
+
+      if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
+        echo "kubectl cannot reach the target cluster; BRS-agent cleanup did not run."
+        exit 1
+      fi
+
+      # Delete by runtime-generated naming pattern.
+      kubectl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
+        [ -n "$ns" ] && kubectl delete namespace "$ns" --ignore-not-found=true
+      done
+
+      kubectl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
+        [ -n "$crb" ] && kubectl delete clusterrolebinding "$crb" --ignore-not-found=true
+      done
+
+      echo "Cleanup complete."
+    EOT
+  }
+
+  depends_on = [
+    module.protect_cluster
+  ]
+}
