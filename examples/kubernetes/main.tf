@@ -323,7 +323,7 @@ module "backup_recover_protect_iks" {
 }
 
 ##############################################################################
-# Cleanup BRS-agent-created resources during destroy
+# Cleanup Runtime BRS-agent-created resources during destroy
 ##############################################################################
 # BRS agent creates namespaces and CRBs dynamically at runtime that Terraform
 # doesn't manage. This cleanup resource ensures they are deleted during destroy.
