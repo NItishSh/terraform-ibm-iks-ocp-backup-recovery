@@ -89,15 +89,20 @@ resource "null_resource" "cleanup_brs_agent_resources" {
       fi
 
       # Build a temporary kubeconfig from stored cluster credentials.
-      # This works regardless of whether kubeconfig files exist on disk (Schematics phase isolation).
-      TMPKUBE=$(mktemp /tmp/kubeconfig-XXXXXX.yml)
-      trap 'rm -f "$TMPKUBE"' EXIT
+      # Use PEM files (not *-data fields) so raw certificate/key values work reliably.
+      TMPDIR=$(mktemp -d /tmp/brs-cleanup-XXXXXX)
+      TMPKUBE="$TMPDIR/kubeconfig.yml"
+      trap 'rm -rf "$TMPDIR"' EXIT
+
+      printf '%s\n' "${self.triggers.kube_ca}" > "$TMPDIR/ca.pem"
+      printf '%s\n' "${self.triggers.kube_cert}" > "$TMPDIR/client.crt"
+      printf '%s\n' "${self.triggers.kube_key}" > "$TMPDIR/client.key"
 
       cat > "$TMPKUBE" << KUBECFG
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority-data: ${self.triggers.kube_ca}
+    certificate-authority: $TMPDIR/ca.pem
     server: ${self.triggers.kube_host}
   name: cluster
 contexts:
@@ -110,8 +115,8 @@ kind: Config
 users:
 - name: admin
   user:
-    client-certificate-data: ${self.triggers.kube_cert}
-    client-key-data: ${self.triggers.kube_key}
+    client-certificate: $TMPDIR/client.crt
+    client-key: $TMPDIR/client.key
 KUBECFG
 
       export KUBECONFIG="$TMPKUBE"
