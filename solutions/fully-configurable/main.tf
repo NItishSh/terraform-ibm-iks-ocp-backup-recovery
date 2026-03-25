@@ -67,13 +67,13 @@ module "protect_cluster" {
 ########################################################################################################################
 resource "null_resource" "cleanup_brs_agent_resources" {
   triggers = {
-    kubeconfig = data.ibm_container_cluster_config.cluster_config.config_file_path
+    kubeconfig_file = basename(data.ibm_container_cluster_config.cluster_config.config_file_path)
   }
 
   provisioner "local-exec" {
     when = destroy
     environment = {
-      KUBECONFIG = self.triggers.kubeconfig
+      KUBECONFIG = "kubeconfig/${self.triggers.kubeconfig_file}"
     }
     command = <<-EOT
       echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
@@ -83,9 +83,14 @@ resource "null_resource" "cleanup_brs_agent_resources" {
         exit 0
       fi
 
+      if [ ! -f "$KUBECONFIG" ]; then
+        echo "kubeconfig file not found at $KUBECONFIG; skipping BRS-agent cleanup."
+        exit 0
+      fi
+
       if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
-        echo "kubectl cannot reach the target cluster; BRS-agent cleanup did not run."
-        exit 1
+        echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
+        exit 0
       fi
 
       # Delete by runtime-generated naming pattern.
