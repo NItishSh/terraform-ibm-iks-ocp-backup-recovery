@@ -62,25 +62,24 @@ module "protect_cluster" {
 # Cleanup BRS-agent runtime resources on destroy
 # BRS agent creates a namespace and ClusterRoleBinding (brs-backup-agent-<uuid>) that Terraform does not manage.
 # This null_resource runs a local-exec on destroy to clean them up.
-# The kubeconfig path is stored in triggers at apply time so it is available during destroy
-# (destroy provisioners cannot reference data sources directly).
+#
+# Cluster credentials (host, CA, cert, key) are stored in triggers at apply time so they are available
+# at destroy time without any dependency on kubeconfig files on disk.
+# Schematics runs refresh and destroy in separate phases/containers, so file-based kubeconfig approaches
+# are unreliable. Storing credentials in triggers is the only reliable approach.
+# Note: these values are already present in Terraform state via the data source; Schematics encrypts state.
 ########################################################################################################################
 resource "null_resource" "cleanup_brs_agent_resources" {
   triggers = {
-    # Store path relative to module dir so it resolves correctly across Schematics apply/destroy runs.
-    # e.g. "kubeconfig/b5701dbddc.../config.yml" — preserves the cluster-specific subdirectory.
-    kubeconfig_rel = replace(
-      data.ibm_container_cluster_config.cluster_config.config_file_path,
-      "${path.module}/",
-      ""
-    )
+    cluster_id = var.cluster_id
+    kube_host  = data.ibm_container_cluster_config.cluster_config.host
+    kube_ca    = data.ibm_container_cluster_config.cluster_config.ca_certificate
+    kube_cert  = data.ibm_container_cluster_config.cluster_config.admin_certificate
+    kube_key   = data.ibm_container_cluster_config.cluster_config.admin_key
   }
 
   provisioner "local-exec" {
-    when = destroy
-    environment = {
-      KUBECONFIG = self.triggers.kubeconfig_rel
-    }
+    when    = destroy
     command = <<-EOT
       echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
 
@@ -89,10 +88,33 @@ resource "null_resource" "cleanup_brs_agent_resources" {
         exit 0
       fi
 
-      if [ ! -f "$KUBECONFIG" ]; then
-        echo "kubeconfig file not found at $KUBECONFIG; skipping BRS-agent cleanup."
-        exit 0
-      fi
+      # Build a temporary kubeconfig from stored cluster credentials.
+      # This works regardless of whether kubeconfig files exist on disk (Schematics phase isolation).
+      TMPKUBE=$(mktemp /tmp/kubeconfig-XXXXXX.yml)
+      trap 'rm -f "$TMPKUBE"' EXIT
+
+      cat > "$TMPKUBE" << KUBECFG
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: ${self.triggers.kube_ca}
+    server: ${self.triggers.kube_host}
+  name: cluster
+contexts:
+- context:
+    cluster: cluster
+    user: admin
+  name: admin
+current-context: admin
+kind: Config
+users:
+- name: admin
+  user:
+    client-certificate-data: ${self.triggers.kube_cert}
+    client-key-data: ${self.triggers.kube_key}
+KUBECFG
+
+      export KUBECONFIG="$TMPKUBE"
 
       if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
         echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
