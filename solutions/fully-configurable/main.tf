@@ -1,10 +1,22 @@
 # Retrieve information about an existing VPC cluster
+resource "time_sleep" "wait_before_cluster_config_download" {
+  create_duration = "15m"
+
+  triggers = {
+    cluster_id     = var.cluster_id
+    endpoint_type  = var.cluster_config_endpoint_type
+    resource_group = var.cluster_resource_group_id
+  }
+}
+
 data "ibm_container_cluster_config" "cluster_config" {
   cluster_name_id   = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   config_dir        = "${path.module}/kubeconfig"
   endpoint_type     = var.cluster_config_endpoint_type != "default" ? var.cluster_config_endpoint_type : null
   admin             = true
+
+  depends_on = [time_sleep.wait_before_cluster_config_download]
 }
 
 module "existing_brs_crn_parser" {
