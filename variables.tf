@@ -677,6 +677,47 @@ variable "policies" {
             unit             = string
             data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
           })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+        replication_targets = optional(list(object({
+          target_id           = number
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
         })))
       }))
     }))
