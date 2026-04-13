@@ -455,6 +455,7 @@ variable "policies" {
           })))
         })))
         replication_targets = optional(list(object({
+          target_type         = string
           target_id           = number
           backup_run_type     = optional(string)
           config_id           = optional(string)
