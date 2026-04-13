@@ -202,25 +202,8 @@
               "display_name": "Wait Timeout (Minutes)"
             },
             {
-              "key": "policy",
-              "custom_config": {
-                "type": "code_editor",
-                "grouping": "deployment",
-                "original_grouping": "deployment",
-                "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
-                }
-              }
-            },
-            {
               "key": "dsc_chart_uri",
               "display_name": "DSC Helm Chart URI"
-            },
-            {
-              "key": "enable_auto_protect",
-              "display_name": "Enable Auto-Protect"
             },
             {
               "key": "dsc_namespace",
@@ -251,10 +234,6 @@
                   "value": "stg.icr.io"
                 }
               ]
-            },
-            {
-              "key": "brs_connection_name",
-              "display_name": "Backup Recovery Service Connection Name"
             },
             {
               "key": "existing_brs_instance_crn",
@@ -340,26 +319,6 @@
             {
               "key": "auto_protect_policy_name",
               "display_name": "Auto-Protect Policy Name"
-            },
-            {
-              "key": "dsc_namespace",
-              "display_name": "DSC Namespace"
-            },
-            {
-              "key": "dsc_name",
-              "display_name": "DSC Release Name"
-            },
-            {
-              "key": "dsc_replicas",
-              "display_name": "DSC Replicas"
-            },
-            {
-              "key": "dsc_chart_uri",
-              "display_name": "DSC Helm Chart URI"
-            },
-            {
-              "key": "dsc_image_version",
-              "display_name": "DSC Image Version"
             },
             {
               "key": "dsc_helm_timeout",
