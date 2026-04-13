@@ -72,7 +72,4 @@ terraform.rc
 # Go workspace file
 go.work
 **/pipeline-logs
-**/.envrc
-local_tests_final.log
-protection_sources.txt
 **/*.code-workspace
