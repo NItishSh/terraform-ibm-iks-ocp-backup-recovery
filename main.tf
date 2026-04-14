@@ -66,7 +66,8 @@ module "crn_parser" {
 ##############################################################################
 
 module "backup_recovery_instance" {
-  source                    = "git::https://github.com/terraform-ibm-backup-recovery.git//?ref=main"
+  source                    = "terraform-ibm-modules/backup-recovery/ibm"
+  version                   = "1.8.0"
   region                    = local.brs_region
   resource_group_id         = var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
@@ -346,7 +347,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
     endpoint                = local.cluster_endpoint
     kubernetes_distribution = var.kube_type == "openshift" ? "kROKS" : "kIKS"
     dynamic "auto_protect_config" {
-      for_each = var.enable_auto_protect ? [1] : []
+      for_each = var.enable_auto_protect && var.auto_protect_policy_name != null ? [1] : []
       content {
         is_default_auto_protected = true
         policy_id                 = local.resolved_policy_ids[var.auto_protect_policy_name]

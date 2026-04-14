@@ -22,6 +22,6 @@ provider "helm" {
     cluster_ca_certificate = data.ibm_container_cluster_config.cluster_config.ca_certificate
   }
   registries = [
-    { url = "oci://stg.icr.io", username = "iamapikey", password = var.ibmcloud_api_key }
+    { url = "oci://${var.dsc_registry}", username = "iamapikey", password = var.ibmcloud_api_key }
   ]
 }
