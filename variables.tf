@@ -74,14 +74,14 @@ variable "add_dsc_rules_to_cluster_sg" {
 variable "dsc_chart_uri" {
   description = "The full OCI registry URI for the Data Source Connector Helm chart, including the digest."
   type        = string
-  default     = "oci://icr.io/ext/brs/brs-ds-connector-chart:7.2.17-release-20260108-ed857f1c@sha256:0b3e84175cb8c1b2608e99e65fc72f2d5c4264dc0a0939ad98e089cc2bb7288e"
+  default     = "oci://icr.io/ext/brs/brs-ds-connector-chart:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
   nullable    = false
 }
 
 variable "dsc_image_version" {
   description = "Container image for the Data Source Connector."
   type        = string
-  default     = "icr.io/ext/brs/brs-ds-connector:7.2.17-release-20260108-ed857f1c@sha256:560ff2170c880dc19712e0f37ba1575240e462f5e2a2ecbc4ecb791aa471f2d0"
+  default     = "icr.io/ext/brs/brs-ds-connector:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
 
   validation {
     condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
@@ -231,132 +231,211 @@ variable "connection_env_type" {
 # Protection Policy
 ##############################################################################
 
-variable "policy" {
-  description = "The backup schedule and retentions of a Protection Policy."
-  type = object({
-    name = string
-    schedule = optional(object({
-      unit      = string # Minutes, Hours, Days, Weeks, Months, Years, Runs
-      frequency = number # required when unit is Minutes/Hours/Days
-
-      # Optional extra layers (allowed even when unit = Minutes)
-      minute_schedule = optional(object({ frequency = number }))
-      hour_schedule   = optional(object({ frequency = number }))
-      day_schedule    = optional(object({ frequency = number }))
-      week_schedule   = optional(object({ day_of_week = list(string) }))
-      month_schedule = optional(object({
-        day_of_week   = optional(list(string))
-        week_of_month = optional(string) # First, Second, Third, Fourth, Last
-        day_of_month  = optional(number)
-      }))
-      year_schedule = optional(object({ day_of_year = string })) # First, Last
-    }))
-
-    retention = optional(object({
-      duration = number
-      unit     = string # Days, Weeks, Months, Years
-
-      data_lock_config = optional(object({
-        mode                           = string # Compliance, Administrative
-        unit                           = string # Days, Weeks, Months, Years
-        duration                       = number
-        enable_worm_on_external_target = optional(bool, false)
-      }))
-    }))
-
-    use_default_backup_target = optional(bool, true)
-
-    # --- Full backup schedule (periodic full backups on top of incrementals) ---
-    full_schedule = optional(object({
-      unit          = string # Days, Weeks, Months, Years, ProtectOnce
-      day_schedule  = optional(object({ frequency = number }))
-      week_schedule = optional(object({ day_of_week = list(string) }))
-      month_schedule = optional(object({
-        day_of_week   = optional(list(string))
-        week_of_month = optional(string)
-        day_of_month  = optional(number)
-      }))
-      year_schedule = optional(object({ day_of_year = string }))
-
-      retention = object({
-        duration = number
-        unit     = string # Days, Weeks, Months, Years
-        data_lock_config = optional(object({
-          mode                           = string
-          unit                           = string
-          duration                       = number
-          enable_worm_on_external_target = optional(bool, false)
-        }))
-      })
-    }))
-
-    # --- Blackout windows (time windows when backups should not run) ---
-    blackout_window = optional(list(object({
-      day = string # Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
-      start_time = object({
-        hour      = number
-        minute    = number
-        time_zone = optional(string, "America/New_York")
-      })
-      end_time = object({
-        hour      = number
-        minute    = number
-        time_zone = optional(string, "America/New_York")
-      })
-    })))
-
-    # --- Run timeouts (prevent hung backup jobs) ---
-    run_timeouts = optional(list(object({
-      timeout_mins = number
-      backup_type  = optional(string, "kRegular") # kRegular, kFull, kLog, kSystem, kHydrateCDP, kStorageArraySnapshot
-    })))
-
-    # --- Extended retention (keep certain snapshots longer) ---
-    extended_retention = optional(list(object({
-      schedule = object({
-        unit      = string # Runs, Days, Weeks, Months, Years
-        frequency = number
-      })
-      retention = object({
-        duration = number
-        unit     = string # Days, Weeks, Months, Years
-        data_lock_config = optional(object({
-          mode                           = string
-          unit                           = string
-          duration                       = number
-          enable_worm_on_external_target = optional(bool, false)
-        }))
-      })
-      run_type  = optional(string, "Regular")
-      config_id = optional(string)
-    })))
-  })
-  default = {
-    name = "default-policy"
-    schedule = {
-      unit      = "Hours"
-      frequency = 6
-    }
-    retention = {
-      duration = 4
-      unit     = "Weeks"
-    }
-    use_default_backup_target = true
-  }
-
-  validation {
-    condition = (
-      (var.policy.schedule == null && var.policy.retention == null) ||
-      (var.policy.schedule != null && var.policy.retention != null)
-    )
-    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
-  }
+variable "auto_protect_policy_name" {
+  description = "Name of an existing protection policy to use for auto-protect. Required when `enable_auto_protect` is `true`. The policy must already exist in the BRS instance (create it using the `terraform-ibm-backup-recovery` module)."
+  type        = string
+  default     = null
 }
 
 variable "enable_auto_protect" {
   description = "Enable auto-protect during the initial cluster registration. This must be set to `true` on the first run; toggling it from `false` to `true` later is not supported by the underlying API and will not retroactively create the protection group."
   type        = bool
   default     = true
+}
+
+##############################################################################
+# Protection Groups (granular backup control)
+##############################################################################
+
+variable "protection_groups" {
+  description = <<-EOT
+  List of protection groups for granular backup control. Each group selects
+  specific namespaces/objects and applies a policy. Use this as an alternative
+  to `enable_auto_protect` for fine-grained control over which workloads are
+  backed up.
+  EOT
+  type = list(object({
+    name        = string
+    policy_name = string
+    description = optional(string)
+
+    # --- Kubernetes-specific params ---
+    enable_indexing       = optional(bool, true)
+    leverage_csi_snapshot = optional(bool, false)
+    non_snapshot_backup   = optional(bool, false)
+    volume_backup_failure = optional(bool, false)
+
+    # Objects (namespaces) to protect
+    objects = optional(list(object({
+      id                          = optional(number)
+      name                        = optional(string)
+      backup_only_pvc             = optional(bool, false)
+      fail_backup_on_hook_failure = optional(bool, false)
+      included_resources          = optional(list(string))
+      excluded_resources          = optional(list(string))
+      include_pvcs = optional(list(object({
+        id   = optional(number)
+        name = optional(string)
+      })))
+      exclude_pvcs = optional(list(object({
+        id   = optional(number)
+        name = optional(string)
+      })))
+
+      # Per-object label-based PV/PVC inclusion
+      include_params = optional(object({
+        label_combination_method = optional(string, "AND") # AND, OR
+        label_vector = optional(list(object({
+          key   = string
+          value = string
+        })))
+        objects = optional(list(object({}))) # usually any or map but provider says array of objects
+        selected_resources = optional(list(object({
+          api_group         = optional(string)
+          is_cluster_scoped = optional(bool)
+          kind              = optional(string)
+          name              = optional(string)
+          version           = optional(string)
+          resource_list = optional(list(object({
+            entity_id = optional(number)
+            name      = optional(string)
+          })))
+        })))
+      }))
+
+      # Per-object label-based PV/PVC exclusion
+      exclude_params = optional(object({
+        label_combination_method = optional(string, "AND")
+        label_vector = optional(list(object({
+          key   = string
+          value = string
+        })))
+        objects = optional(list(object({})))
+        selected_resources = optional(list(object({
+          api_group         = optional(string)
+          is_cluster_scoped = optional(bool)
+          kind              = optional(string)
+          name              = optional(string)
+          version           = optional(string)
+          resource_list = optional(list(object({
+            entity_id = optional(number)
+            name      = optional(string)
+          })))
+        })))
+      }))
+
+      # Quiescing rules for app-consistent backups
+      quiesce_groups = optional(list(object({
+        quiesce_mode = string # kQuiesceTogether, kQuiesceIndependently
+        quiesce_rules = list(object({
+          pod_selector_labels = optional(list(object({
+            key   = string
+            value = string
+          })))
+          pre_snapshot_hooks = list(object({
+            commands      = list(string)
+            container     = optional(string)
+            fail_on_error = optional(bool, false)
+            timeout       = optional(number)
+          }))
+          post_snapshot_hooks = list(object({
+            commands      = list(string)
+            container     = optional(string)
+            fail_on_error = optional(bool, false)
+            timeout       = optional(number)
+          }))
+        }))
+      })))
+    })))
+
+    # Object IDs to exclude
+    exclude_object_ids = optional(list(number))
+
+    # Label-based namespace selection (2D array of label IDs)
+    label_ids         = optional(list(number))
+    exclude_label_ids = optional(list(number))
+
+    # Global label-based inclusion filter
+    include_params = optional(object({
+      label_combination_method = optional(string, "AND") # AND, OR
+      label_vector = optional(list(object({
+        key   = string
+        value = string
+      })))
+      objects = optional(list(object({})))
+      selected_resources = optional(list(object({
+        api_group         = optional(string)
+        is_cluster_scoped = optional(bool)
+        kind              = optional(string)
+        name              = optional(string)
+        version           = optional(string)
+        resource_list = optional(list(object({
+          entity_id = optional(number)
+          name      = optional(string)
+        })))
+      })))
+    }))
+
+    # Global label-based exclusion filter
+    exclude_params = optional(object({
+      label_combination_method = optional(string, "AND")
+      label_vector = optional(list(object({
+        key   = string
+        value = string
+      })))
+      objects = optional(list(object({})))
+      selected_resources = optional(list(object({
+        api_group         = optional(string)
+        is_cluster_scoped = optional(bool)
+        kind              = optional(string)
+        name              = optional(string)
+        version           = optional(string)
+        resource_list = optional(list(object({
+          entity_id = optional(number)
+          name      = optional(string)
+        })))
+      })))
+    }))
+
+    # --- Alert policy ---
+    alert_policy = optional(object({
+      backup_run_status = list(string) # kFailure, kSuccess, kSlaViolation, kWarning
+      alert_targets = optional(list(object({
+        email_address  = string
+        language       = optional(string, "en-us")
+        recipient_type = optional(string, "kTo")
+      })))
+      raise_object_level_failure_alert                    = optional(bool)
+      raise_object_level_failure_alert_after_each_attempt = optional(bool)
+      raise_object_level_failure_alert_after_last_attempt = optional(bool)
+    }))
+
+    # --- SLA ---
+    sla = optional(list(object({
+      backup_run_type = optional(string, "kIncremental") # kIncremental, kFull, kLog
+      sla_minutes     = number
+    })))
+
+    # --- Scheduling ---
+    start_time = optional(object({
+      hour      = number
+      minute    = number
+      time_zone = optional(string, "America/Los_Angeles")
+    }))
+
+    # --- Advanced configs (key/value pairs) ---
+    advanced_configs = optional(list(object({
+      key   = string
+      value = string
+    })))
+
+    priority           = optional(string, "kMedium") # kLow, kMedium, kHigh
+    qos_policy         = optional(string)            # kBackupHDD, kBackupSSD, etc.
+    is_paused          = optional(bool, false)
+    abort_in_blackouts = optional(bool, false)
+    pause_in_blackouts = optional(bool, false)
+  }))
+  default = []
 }
 
 ##############################################################################
@@ -374,11 +453,11 @@ variable "registration_images" {
     init_container              = optional(string, null)
   })
   default = {
-    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.17@sha256:2b9e69f37752c6f8758b8de61b4c4ec6ccc60083d23211f59b07780069e9ddf8"
+    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.18@sha256:f347698eb6180645d8c1b71d69a9fc40bb7c0bd14e5cdece9b7da79af74e8262"
     velero                      = "icr.io/ext/brs/oadp-velero:1.3.8@sha256:2d0014471b5c0e46cf96ac452069b9fa1ebbffd1d50a8ffecb2b443dbfbd4b00"
     velero_aws_plugin           = "icr.io/ext/brs/oadp-velero-plugin-for-aws:1.3.8@sha256:3adcd0bfa963f980ad41dbff05c44c4b11d6b07e493a9c53a0ee3483a905039d"
     velero_openshift_plugin     = "icr.io/ext/brs/oadp-velero-plugin-for-openshift:1.4.7@sha256:8b5dcea0fc837e5547c253f355d71b19f825eed6fac1e19c40af44b19fd7259a"
-    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.17@sha256:d7b0e02b267f27aa41c2879bb5c8dcafe9e2e6e0a825fa9e4116a7cd41403983"
+    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.18@sha256:629fdf6852a9583674c41fc1ccbab3006c737067f5dccafbee2fe36fbc6ee748"
   }
   nullable = false
 }
@@ -397,4 +476,486 @@ variable "access_tags" {
   description = "Add existing access management tags to the Backup Recovery instance to manage access."
   type        = list(string)
   default     = []
+}
+
+##############################################################################
+# BRS Policy Variables
+##############################################################################
+
+variable "policies" {
+  description = "A list of protection policies to create or look up. Set `create_new_policy` to `true` (default) to create a new policy with the specified `schedule` and `retention`. Set `create_new_policy` to `false` to reference an existing policy by `name`."
+  type = list(object({
+    name                      = string
+    create_new_policy         = optional(bool, true)
+    use_default_backup_target = optional(bool, true)
+
+    # --- primary_backup_target advanced details ---
+    primary_backup_target_details = optional(object({
+      target_id = number
+      tier_settings = optional(list(object({
+        cloud_platform = string # AWS, Azure, Google, Oracle
+        aws_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        azure_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        google_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+        oracle_tiering = optional(object({
+          tiers = list(object({ tier_type = string, move_after = number, move_after_unit = string }))
+        }))
+      })))
+    }))
+
+    # --- Standard backup schedule and retention ---
+    schedule = optional(object({
+      unit            = string
+      minute_schedule = optional(object({ frequency = number }))
+      hour_schedule   = optional(object({ frequency = number }))
+      day_schedule    = optional(object({ frequency = number }))
+      week_schedule   = optional(object({ day_of_week = list(string) }))
+      month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+      year_schedule   = optional(object({ day_of_year = string }))
+    }))
+    retention = optional(object({
+      duration         = number
+      unit             = string
+      data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+    }))
+
+    # --- Bare Metal Recovery (BMR) ---
+    bmr = optional(object({
+      schedule = optional(object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      }))
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Continuous Data Protection (CDP) ---
+    cdp = optional(object({
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Database Log Backup ---
+    log = optional(object({
+      schedule = object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      })
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Storage Array Snapshot ---
+    storage_array_snapshot = optional(object({
+      schedule = object({
+        unit            = string
+        minute_schedule = optional(object({ frequency = number }))
+        hour_schedule   = optional(object({ frequency = number }))
+        day_schedule    = optional(object({ frequency = number }))
+        week_schedule   = optional(object({ day_of_week = list(string) }))
+        month_schedule  = optional(object({ day_of_month = optional(number), day_of_week = optional(list(string)), week_of_month = optional(string) }))
+        year_schedule   = optional(object({ day_of_year = string }))
+      })
+      retention = object({
+        duration         = number
+        unit             = string
+        data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+      })
+    }))
+
+    # --- Blackout windows ---
+    blackout_window = optional(list(object({
+      day = string
+      start_time = object({
+        hour      = number
+        minute    = number
+        time_zone = optional(string, "America/New_York")
+      })
+      end_time = object({
+        hour      = number
+        minute    = number
+        time_zone = optional(string, "America/New_York")
+      })
+    })))
+
+    # --- Run timeouts (prevent hung backup jobs) ---
+    run_timeouts = optional(list(object({
+      timeout_mins = number
+      backup_type  = optional(string, "kRegular")
+    })))
+
+    # --- Extended retention (keep certain snapshots longer) ---
+    extended_retention = optional(list(object({
+      schedule = object({
+        unit      = string
+        frequency = number
+      })
+      retention = object({
+        duration = number
+        unit     = string
+        data_lock_config = optional(object({
+          mode                           = string
+          unit                           = string
+          duration                       = number
+          enable_worm_on_external_target = optional(bool, false)
+        }))
+      })
+      run_type  = optional(string, "Regular")
+      config_id = optional(string)
+    })))
+
+    # --- Cascaded Targets Config ---
+    cascaded_targets_config = optional(object({
+      source_cluster_id = number
+      remote_targets = list(object({
+        archival_targets = optional(list(object({
+          target_id           = number
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+        cloud_spin_targets = optional(list(object({
+          target = object({
+            id = optional(number)
+          })
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+        replication_targets = optional(list(object({
+          target_id           = number
+          backup_run_type     = optional(string)
+          config_id           = optional(string)
+          copy_on_run_success = optional(bool)
+          schedule = object({
+            unit      = string
+            frequency = optional(number)
+          })
+          retention = object({
+            duration         = number
+            unit             = string
+            data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+          })
+          extended_retention = optional(list(object({
+            schedule = object({
+              unit      = string
+              frequency = number
+            })
+            retention = object({
+              duration         = number
+              unit             = string
+              data_lock_config = optional(object({ mode = string, unit = string, duration = number, enable_worm_on_external_target = optional(bool, false) }))
+            })
+            run_type  = optional(string, "Regular")
+            config_id = optional(string)
+          })))
+        })))
+      }))
+    }))
+  }))
+  default = [{
+    name = "basic-policy"
+    schedule = {
+      unit         = "Days"
+      day_schedule = { frequency = 1 }
+    }
+    retention = {
+      duration = 2
+      unit     = "Days"
+    }
+  }]
+
+  # 1. Structural Validation
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        p.create_new_policy == false ||
+        (p.schedule != null && p.retention != null)
+      )
+    ])
+    error_message = "When create_new_policy is true, both schedule and retention are required."
+  }
+
+  # 2. Unit Enumerations (Registry Constraint: "Allowable values: Days, Weeks, Months, Years")
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.retention == null ? true :
+      contains(["Days", "Weeks", "Months", "Years"], p.retention.unit)
+    ])
+    error_message = "Retention unit must be one of: Days, Weeks, Months, Years."
+  }
+
+  # 3. Frequency Minimums (Registry/Cohesity Constraint: Minutes >= 7, Others >= 1)
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.schedule == null ? true : (
+        (p.schedule.minute_schedule == null ? true : p.schedule.minute_schedule.frequency >= 7) &&
+        (p.schedule.hour_schedule == null ? true : p.schedule.hour_schedule.frequency >= 1) &&
+        (p.schedule.day_schedule == null ? true : p.schedule.day_schedule.frequency >= 1)
+      )
+    ])
+    error_message = "Invalid frequency: Minutes must be >= 7. Hours and Days must be >= 1."
+  }
+
+  # 4. Data Lock (WORM) Modes (Registry Constraint: "Compliance" or "Administrative")
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        p.retention == null || p.retention.data_lock_config == null ? true :
+        contains(["Compliance", "Administrative"], p.retention.data_lock_config.mode)
+      )
+    ])
+    error_message = "Data lock mode must be 'Compliance' or 'Administrative'."
+  }
+
+  # 5. Blackout Window Weekdays (Registry Constraint: Proper case day names)
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.blackout_window == null ? true : alltrue([
+        for bw in p.blackout_window :
+        contains(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], bw.day)
+      ])
+    ])
+    error_message = "Blackout window 'day' must be the full weekday name (e.g., 'Monday')."
+  }
+
+  # 6. Run Timeouts Backup Types (Registry Constraint: kRegular, kFull, kLog, kSystem)
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.run_timeouts == null ? true : alltrue([
+        for rt in p.run_timeouts :
+        contains(["kRegular", "kFull", "kLog", "kSystem", "kHydrateCDP", "kStorageArraySnapshot"], rt.backup_type)
+      ])
+    ])
+    error_message = "Invalid backup_type in run_timeouts. Allowed: kRegular, kFull, kLog, kSystem, kHydrateCDP, kStorageArraySnapshot."
+  }
+
+  # 7. Tiering Platform Cross-Check
+  # Ensures user doesn't provide azure_tiering when cloud_platform is "AWS"
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        p.primary_backup_target_details == null || p.primary_backup_target_details.tier_settings == null ? true : alltrue([
+          for ts in p.primary_backup_target_details.tier_settings : (
+            (ts.cloud_platform == "AWS" ? ts.aws_tiering != null : true) &&
+            (ts.cloud_platform == "Azure" ? ts.azure_tiering != null : true) &&
+            (ts.cloud_platform == "Oracle" ? ts.oracle_tiering != null : true) &&
+            (ts.cloud_platform == "Google" ? ts.google_tiering != null : true)
+          )
+        ])
+      )
+    ])
+    error_message = "The tiering configuration block must match the selected cloud_platform (e.g., provide 'aws_tiering' for 'AWS')."
+  }
+}
+
+##############################################################################
+# Recovery Variables
+##############################################################################
+
+variable "recoveries" {
+  description = <<-EOT
+  List of recovery operations to restore backups created by protection groups.
+  Supports multiple environments: Kubernetes, VMware, Physical, AWS, Azure, GCP, SQL, Oracle, and more.
+
+  This variable follows the official IBM Backup Recovery provider schema and can be used
+  across different backup scenarios. For IKS/ROKS recovery, use kubernetes_params.
+
+  Example for Kubernetes recovery:
+  recoveries = [{
+    name                 = "restore-production-namespace"
+    snapshot_environment = "kKubernetes"
+    kubernetes_params = {
+      recovery_action = "RecoverNamespaces"
+      objects = [{
+        snapshot_id         = "snapshot-123"
+        protection_group_id = "pg-456"
+      }]
+    }
+  }]
+
+  Note: The current provider version supports basic recovery operations. Advanced features
+  like namespace_mapping, volume_info_vec, and cross-cluster recovery may require provider updates.
+  EOT
+  type = list(object({
+    name                 = string
+    snapshot_environment = string # kKubernetes, kVMware, kPhysical, kAWS, kAzure, kGCP, kSQL, kOracle, kView, etc.
+
+    # Kubernetes-specific recovery parameters
+    kubernetes_params = optional(object({
+      recovery_action = string # RecoverNamespaces, RecoverPVs, RecoverApps
+
+      objects = list(object({
+        snapshot_id           = string
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+        recover_from_standby  = optional(bool, false)
+      }))
+    }))
+
+    # VMware-specific recovery parameters (for future provider support)
+    vmware_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+        recover_from_standby  = optional(bool, false)
+      })))
+    }))
+
+    # Physical server recovery parameters (for future provider support)
+    physical_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+
+    # AWS-specific recovery parameters (for future provider support)
+    aws_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+
+    # Azure-specific recovery parameters (for future provider support)
+    azure_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+
+    # GCP-specific recovery parameters (for future provider support)
+    gcp_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+
+    # SQL-specific recovery parameters (for future provider support)
+    sql_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+
+    # Oracle-specific recovery parameters (for future provider support)
+    oracle_params = optional(object({
+      recovery_action = optional(string)
+      objects = optional(list(object({
+        snapshot_id           = optional(string)
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+      })))
+    }))
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for r in var.recoveries : contains([
+        "kKubernetes", "kVMware", "kPhysical", "kAWS", "kAzure",
+        "kGCP", "kSQL", "kOracle", "kView", "kPuppeteer",
+        "kPhysicalFiles", "kPure", "kNimble", "kAzureNative",
+        "kAD", "kAWSNative", "kGCPNative", "kKVM", "kAcropolis",
+        "kExchange", "kHyperV", "kHyperVVSS", "kO365", "kO365Outlook",
+        "kO365PublicFolders", "kO365Teams", "kO365Group", "kO365Exchange",
+        "kO365OneDrive", "kO365Sharepoint", "kCassandra", "kMongoDB",
+        "kCouchbase", "kHdfs", "kHive", "kHBase", "kUDA", "kSfdc"
+      ], r.snapshot_environment)
+    ])
+    error_message = "snapshot_environment must be a valid environment type as per IBM Backup Recovery provider documentation."
+  }
 }

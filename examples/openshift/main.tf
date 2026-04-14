@@ -184,19 +184,54 @@ module "backup_recover_protect_ocp" {
   region                    = var.region
   connection_env_type       = var.classic_cluster ? "kRoksClassic" : "kRoksVpc"
   dsc_storage_class         = var.dsc_storage_class == null ? (var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier") : var.dsc_storage_class
-  # --- Backup Policy ---
-  policy = {
-    name = "${var.prefix}-retention"
-    schedule = {
-      unit      = "Minutes"
-      frequency = 30
-    }
-    retention = {
-      duration = 1
-      unit     = "Days"
-    }
-    use_default_backup_target = true
+  # --- Backup Policy (policy must already exist in the BRS instance) ---
+  auto_protect_policy_name = "${var.prefix}-retention"
+  access_tags              = var.access_tags
+  resource_tags            = var.resource_tags
+}
+
+##############################################################################
+# Cleanup Runtime BRS-agent-created resources during destroy
+##############################################################################
+# BRS agent creates namespaces and CRBs dynamically at runtime that Terraform
+# doesn't manage. This cleanup resource ensures they are deleted during destroy.
+resource "null_resource" "cleanup_brs_agent_resources" {
+  triggers = {
+    kubeconfig = data.ibm_container_cluster_config.cluster_config.config_file_path
   }
-  access_tags   = var.access_tags
-  resource_tags = var.resource_tags
+
+  provisioner "local-exec" {
+    when = destroy
+    environment = {
+      KUBECONFIG = self.triggers.kubeconfig
+    }
+    command = <<-EOT
+      echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
+
+      if ! command -v kubectl >/dev/null 2>&1; then
+        echo "kubectl not found; skipping BRS-agent cleanup."
+        exit 0
+      fi
+
+      if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
+        echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
+        exit 0
+      fi
+
+      # Delete by runtime-generated naming pattern.
+      kubectl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
+        [ -n "$ns" ] && kubectl delete namespace "$ns" --ignore-not-found=true || true
+      done
+
+      kubectl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
+        [ -n "$crb" ] && kubectl delete clusterrolebinding "$crb" --ignore-not-found=true || true
+      done
+
+      echo "Cleanup complete."
+    EOT
+  }
+
+  depends_on = [
+    module.backup_recover_protect_ocp
+  ]
 }
