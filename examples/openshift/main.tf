@@ -127,6 +127,10 @@ resource "ibm_container_cluster" "classic_cluster" {
     delete = "2h"
     create = "3h"
   }
+
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 data "ibm_container_vpc_cluster" "vpc_cluster_data" {
@@ -188,6 +192,8 @@ module "backup_recover_protect_ocp" {
   auto_protect_policy_name = "${var.prefix}-retention"
   access_tags              = var.access_tags
   resource_tags            = var.resource_tags
+  # Disable automatic tag addition to prevent drift with ocp_base module
+  add_cluster_tags = false
 }
 
 ##############################################################################

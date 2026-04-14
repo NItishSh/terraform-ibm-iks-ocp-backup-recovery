@@ -7,6 +7,12 @@ variable "cluster_id" {
   type        = string
 }
 
+variable "add_cluster_tags" {
+  description = "Whether to add BRS tags to the cluster. Set to false if you manage cluster tags externally to avoid drift. When false, you should manually add the tags 'brs-region:<region>' and 'brs-guid:<guid>' to your cluster."
+  type        = bool
+  default     = true
+}
+
 variable "cluster_resource_group_id" {
   description = "Resource group ID the cluster is deployed in."
   type        = string

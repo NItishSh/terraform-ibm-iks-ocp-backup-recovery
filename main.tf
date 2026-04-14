@@ -757,7 +757,11 @@ resource "ibm_backup_recovery_protection_group" "protection_group" {
 # Tag cluster with BRS instance information
 ##############################################################################
 
+# Adds BRS tags to identify which instance is protecting this cluster.
+# Set add_cluster_tags = false to prevent tag drift when cluster tags are managed externally.
 resource "ibm_resource_tag" "cluster_brs_tag" {
+  count = var.add_cluster_tags ? 1 : 0
+
   resource_id = local.cluster_crn
   tag_type    = "user"
   tags        = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]

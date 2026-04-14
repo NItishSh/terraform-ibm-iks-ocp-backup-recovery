@@ -52,3 +52,8 @@ output "recovery_status" {
     }
   }
 }
+
+output "brs_tags" {
+  description = "BRS tags that should be added to the cluster to prevent tag drift. Include these in your cluster's tags input."
+  value       = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]
+}
