@@ -133,7 +133,12 @@ variable "dsc_image_version" {
     error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<tag>@sha256:<64-hex-digest>'."
   }
 }
-
+variable "dsc_registry" {
+  description = "Registry for the Data Source Connector."
+  type        = string
+  default     = "icr.io"
+  nullable    = false
+}
 variable "brs_connection_name" {
   type        = string
   description = "Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster. If `brs_create_new_connection` is set to `true` (default), this will be the name of the new connection created. If set to `false`, this must be the name of an existing connection."
@@ -246,10 +251,10 @@ variable "connection_env_type" {
   }
 }
 variable "policies" {
-  description = "A list of protection policies to create or look up. For new policies, provide `schedule` and `retention`. To reference existing policies by name, omit `schedule` and `retention`."
+  description = "A list of protection policies to create or look up. Set `create_new_policy` to `true` (default) to create a new policy with the specified `schedule` and `retention`. Set `create_new_policy` to `false` to reference an existing policy by `name`."
   type = list(object({
-    name = string
-
+    name                      = string
+    create_new_policy         = optional(bool, true)
     use_default_backup_target = optional(bool, true)
 
     # --- primary_backup_target advanced details ---
@@ -498,27 +503,86 @@ variable "policies" {
     }
   }]
 
+  # 1. Structural Validation
   validation {
     condition = alltrue([
       for p in var.policies : (
-        (p.schedule == null && p.retention == null) ||
+        p.create_new_policy == false ||
         (p.schedule != null && p.retention != null)
       )
     ])
-    error_message = "For existing policies, do not provide schedule or retention (both must be null). For custom policies, both schedule and retention are required."
+    error_message = "When create_new_policy is true, both schedule and retention are required."
   }
 
+  # 2. Unit Enumerations (Registry Constraint: "Allowable values: Days, Weeks, Months, Years")
   validation {
     condition = alltrue([
-      for p in var.policies : p.schedule == null ? true : contains(["Minutes", "Hours", "Days", "Weeks", "Months", "Years"], p.schedule.unit)
+      for p in var.policies : p.retention == null ? true :
+      contains(["Days", "Weeks", "Months", "Years"], p.retention.unit)
     ])
-    error_message = "Policy schedule unit must be one of: Minutes, Hours, Days, Weeks, Months, Years."
+    error_message = "Retention unit must be one of: Days, Weeks, Months, Years."
   }
 
+  # 3. Frequency Minimums (Registry/Cohesity Constraint: Minutes >= 7, Others >= 1)
   validation {
     condition = alltrue([
-      for p in var.policies : p.retention == null ? true : contains(["Days", "Weeks", "Months", "Years"], p.retention.unit)
+      for p in var.policies : p.schedule == null ? true : (
+        (p.schedule.minute_schedule == null ? true : p.schedule.minute_schedule.frequency >= 7) &&
+        (p.schedule.hour_schedule == null ? true : p.schedule.hour_schedule.frequency >= 1) &&
+        (p.schedule.day_schedule == null ? true : p.schedule.day_schedule.frequency >= 1)
+      )
     ])
-    error_message = "Policy retention unit must be one of: Days, Weeks, Months, Years."
+    error_message = "Invalid frequency: Minutes must be >= 7. Hours and Days must be >= 1."
+  }
+
+  # 4. Data Lock (WORM) Modes (Registry Constraint: "Compliance" or "Administrative")
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        p.retention == null || p.retention.data_lock_config == null ? true :
+        contains(["Compliance", "Administrative"], p.retention.data_lock_config.mode)
+      )
+    ])
+    error_message = "Data lock mode must be 'Compliance' or 'Administrative'."
+  }
+
+  # 5. Blackout Window Weekdays (Registry Constraint: Proper case day names)
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.blackout_window == null ? true : alltrue([
+        for bw in p.blackout_window :
+        contains(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], bw.day)
+      ])
+    ])
+    error_message = "Blackout window 'day' must be the full weekday name (e.g., 'Monday')."
+  }
+
+  # 6. Run Timeouts Backup Types (Registry Constraint: kRegular, kFull, kLog, kSystem)
+  validation {
+    condition = alltrue([
+      for p in var.policies : p.run_timeouts == null ? true : alltrue([
+        for rt in p.run_timeouts :
+        contains(["kRegular", "kFull", "kLog", "kSystem", "kHydrateCDP", "kStorageArraySnapshot"], rt.backup_type)
+      ])
+    ])
+    error_message = "Invalid backup_type in run_timeouts. Allowed: kRegular, kFull, kLog, kSystem, kHydrateCDP, kStorageArraySnapshot."
+  }
+
+  # 7. Tiering Platform Cross-Check
+  # Ensures user doesn't provide azure_tiering when cloud_platform is "AWS"
+  validation {
+    condition = alltrue([
+      for p in var.policies : (
+        p.primary_backup_target_details == null || p.primary_backup_target_details.tier_settings == null ? true : alltrue([
+          for ts in p.primary_backup_target_details.tier_settings : (
+            (ts.cloud_platform == "AWS" ? ts.aws_tiering != null : true) &&
+            (ts.cloud_platform == "Azure" ? ts.azure_tiering != null : true) &&
+            (ts.cloud_platform == "Oracle" ? ts.oracle_tiering != null : true) &&
+            (ts.cloud_platform == "Google" ? ts.google_tiering != null : true)
+          )
+        ])
+      )
+    ])
+    error_message = "The tiering configuration block must match the selected cloud_platform (e.g., provide 'aws_tiering' for 'AWS')."
   }
 }
