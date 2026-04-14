@@ -136,7 +136,7 @@ variable "dsc_image_version" {
 variable "dsc_registry" {
   description = "Registry for the Data Source Connector."
   type        = string
-  default     = "stg.icr.io"
+  default     = "icr.io"
   nullable    = false
 }
 variable "brs_connection_name" {
