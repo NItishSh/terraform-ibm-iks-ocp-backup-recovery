@@ -201,7 +201,7 @@ resource "null_resource" "cleanup_brs_agent_resources" {
   }
 
   provisioner "local-exec" {
-    when    = destroy
+    when = destroy
     environment = {
       KUBECONFIG = self.triggers.kubeconfig
     }

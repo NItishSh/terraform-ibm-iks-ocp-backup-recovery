@@ -8,6 +8,7 @@ resource "time_sleep" "wait_before_cluster_config_download" {
     resource_group = var.cluster_resource_group_id
   }
 }
+
 data "ibm_container_cluster_config" "cluster_config" {
   cluster_name_id   = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
