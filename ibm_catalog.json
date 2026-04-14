@@ -94,10 +94,6 @@
               "required": true
             },
             {
-              "key": "region",
-              "display_name": "Region"
-            },
-            {
               "key": "provider_visibility",
               "display_name": "Provider Visibility",
               "options": [
@@ -126,21 +122,6 @@
               "required": true
             },
             {
-              "key": "kube_type",
-              "required": true,
-              "display_name": "Cluster Type",
-              "options": [
-                {
-                  "displayname": "Kubernetes",
-                  "value": "kubernetes"
-                },
-                {
-                  "displayname": "OpenShift",
-                  "value": "openshift"
-                }
-              ]
-            },
-            {
               "key": "cluster_resource_group_id",
               "required": true,
               "display_name": "Cluster Resource Group",
@@ -155,7 +136,6 @@
             },
             {
               "key": "cluster_config_endpoint_type",
-              "display_name": "Cluster Config Endpoint Type",
               "options": [
                 {
                   "displayname": "Default",
@@ -202,6 +182,61 @@
               "display_name": "Wait Timeout (Minutes)"
             },
             {
+              "key": "policy",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "dsc_chart_uri",
+              "display_name": "DSC Helm Chart URI"
+            },
+            {
+              "key": "enable_auto_protect",
+              "display_name": "Enable Auto-Protect"
+            },
+            {
+              "key": "dsc_namespace",
+              "display_name": "DSC Namespace"
+            },
+            {
+              "key": "dsc_name",
+              "display_name": "DSC Release Name"
+            },
+            {
+              "key": "dsc_replicas",
+              "display_name": "DSC Replicas"
+            },
+            {
+              "key": "dsc_image_version",
+              "display_name": "DSC Image Version"
+            },
+            {
+              "key": "dsc_registry",
+              "display_name": "DSC Registry",
+              "options": [
+                {
+                  "displayname": "ICR.IO",
+                  "value": "icr.io"
+                },
+                {
+                  "displayname": "STG.ICR.IO",
+                  "value": "stg.icr.io"
+                }
+              ]
+            },
+            {
+              "key": "brs_connection_name",
+              "display_name": "Backup Recovery Service Connection Name"
+            },
+            {
               "key": "existing_brs_instance_crn",
               "display_name": "Backup Recovery Service Instance",
               "type": "string",
@@ -217,8 +252,8 @@
               }
             },
             {
-              "key": "brs_instance_name",
-              "display_name": "Backup Recovery Service Instance Name"
+              "key": "add_dsc_rules_to_cluster_sg",
+              "display_name": "Add Security Group Rules"
             },
             {
               "key": "brs_endpoint_type",
@@ -235,12 +270,65 @@
               ]
             },
             {
-              "key": "brs_connection_name",
-              "display_name": "Backup Recovery Service Connection Name"
+              "key": "kube_type",
+              "required": true,
+              "display_name": "Cluster Type",
+              "options": [
+                {
+                  "displayname": "Kubernetes",
+                  "value": "kubernetes"
+                },
+                {
+                  "displayname": "OpenShift",
+                  "value": "openshift"
+                }
+              ]
+            },
+            {
+              "key": "registration_images",
+              "display_name": "Registration Images",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "dsc_helm_timeout",
+              "display_name": "Helm Timeout (Seconds)"
+            },
+            {
+              "key": "dsc_storage_class",
+              "display_name": "Data Source Connector Storage Class"
+            },
+            {
+              "key": "create_dsc_worker_pool",
+              "display_name": "Create Data Source Connector Worker Pool"
             },
             {
               "key": "brs_create_new_connection",
               "display_name": "Create New Connection"
+            },
+            {
+              "key": "brs_instance_name",
+              "display_name": "Backup Recovery Service Instance Name"
+            },
+            {
+              "key": "region",
+              "display_name": "Region"
+            },
+            {
+              "key": "access_tags",
+              "display_name": "Access Tags"
+            },
+            {
+              "key": "resource_tags",
+              "display_name": "Resource Tags"
             },
             {
               "key": "connection_env_type",
@@ -263,86 +351,6 @@
                   "value": "kRoksClassic"
                 }
               ]
-            },
-            {
-              "key": "policies",
-              "display_name": "Protection Policies",
-              "custom_config": {
-                "type": "code_editor",
-                "grouping": "deployment",
-                "original_grouping": "deployment",
-                "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
-                }
-              }
-            },
-            {
-              "key": "enable_auto_protect",
-              "display_name": "Enable Auto-Protect"
-            },
-            {
-              "key": "auto_protect_policy_name",
-              "display_name": "Auto-Protect Policy Name"
-            },
-            {
-              "key": "dsc_namespace",
-              "display_name": "DSC Namespace"
-            },
-            {
-              "key": "dsc_name",
-              "display_name": "DSC Release Name"
-            },
-            {
-              "key": "dsc_replicas",
-              "display_name": "DSC Replicas"
-            },
-            {
-              "key": "dsc_chart_uri",
-              "display_name": "DSC Helm Chart URI"
-            },
-            {
-              "key": "dsc_image_version",
-              "display_name": "DSC Image Version"
-            },
-            {
-              "key": "dsc_helm_timeout",
-              "display_name": "Helm Timeout (Seconds)"
-            },
-            {
-              "key": "dsc_storage_class",
-              "display_name": "Data Source Connector Storage Class"
-            },
-            {
-              "key": "create_dsc_worker_pool",
-              "display_name": "Create Data Source Connector Worker Pool"
-            },
-            {
-              "key": "add_dsc_rules_to_cluster_sg",
-              "display_name": "Add Security Group Rules"
-            },
-            {
-              "key": "registration_images",
-              "display_name": "Registration Images",
-              "custom_config": {
-                "type": "code_editor",
-                "grouping": "deployment",
-                "original_grouping": "deployment",
-                "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
-                }
-              }
-            },
-            {
-              "key": "access_tags",
-              "display_name": "Access Tags"
-            },
-            {
-              "key": "resource_tags",
-              "display_name": "Resource Tags"
             }
           ],
           "dependencies": [],
