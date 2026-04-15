@@ -192,6 +192,22 @@ module "backup_recover_protect_ocp" {
   auto_protect_policy_name = "${var.prefix}-retention"
   access_tags              = var.access_tags
   resource_tags            = var.resource_tags
+  policies = [
+    {
+      name              = "${var.prefix}-retention"
+      create_new_policy = true
+      schedule = {
+        unit = "Days"
+        day_schedule = {
+          frequency = 1
+        }
+      }
+      retention = {
+        unit     = "Days"
+        duration = 30
+      }
+    }
+  ]
   # Disable automatic tag addition to prevent drift with ocp_base module
   add_cluster_tags = false
 }

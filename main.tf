@@ -45,8 +45,9 @@ locals {
   ))) : toset([])
 
   resolved_policy_ids = {
-    for k, v in data.ibm_backup_recovery_protection_policies.existing_policies : k => one(v.policies[*].id)
-    if length(v.policies) > 0
+    for k, v in data.ibm_backup_recovery_protection_policies.existing_policies : k => (
+      length(v.policies) > 0 ? v.policies[0].id : null
+    )
   }
 }
 
@@ -366,7 +367,8 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 
   depends_on = [
     helm_release.data_source_connector,
-    time_sleep.wait_before_helm_destroy
+    time_sleep.wait_before_helm_destroy,
+    module.backup_recovery_instance
   ]
 }
 

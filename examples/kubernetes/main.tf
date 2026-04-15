@@ -161,7 +161,8 @@ module "backup_recover_protect_iks" {
   resource_tags            = var.resource_tags
   policies = [
     {
-      name = "${var.prefix}-retention"
+      name              = "${var.prefix}-retention"
+      create_new_policy = true
       schedule = {
         unit = "Days"
         day_schedule = {
