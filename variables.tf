@@ -835,10 +835,12 @@ variable "recoveries" {
   List of recovery operations to restore backups created by protection groups.
   Supports multiple environments: Kubernetes, VMware, Physical, AWS, Azure, GCP, SQL, Oracle, and more.
 
-  This variable follows the official IBM Backup Recovery provider schema and can be used
-  across different backup scenarios. For IKS/ROKS recovery, use kubernetes_params.
+  Recovery Types:
+  1. Full Recovery (Same Cluster): Restore all resources to the same cluster
+  2. Selective Recovery (Same Cluster): Restore specific resources to the same cluster
+  3. Cross-Region Recovery: Restore to a different IBM Cloud region (different cluster)
 
-  Example for Kubernetes recovery:
+  Example for same-cluster full recovery:
   recoveries = [{
     name                 = "restore-production-namespace"
     snapshot_environment = "kKubernetes"
@@ -851,12 +853,58 @@ variable "recoveries" {
     }
   }]
 
-  Note: The current provider version supports basic recovery operations. Advanced features
-  like namespace_mapping, volume_info_vec, and cross-cluster recovery may require provider updates.
+  Example for selective recovery (same cluster):
+  recoveries = [{
+    name                 = "restore-specific-resources"
+    snapshot_environment = "kKubernetes"
+    kubernetes_params = {
+      recovery_action = "RecoverApps"
+      objects = [{
+        snapshot_id = "snapshot-123"
+      }]
+      selected_resources = [{
+        resource_type = "Deployment"
+        resource_name = "my-app"
+        namespace     = "production"
+      }]
+    }
+  }]
+
+  Example for cross-region recovery:
+  recoveries = [{
+    name                 = "disaster-recovery-to-dr-region"
+    snapshot_environment = "kKubernetes"
+    target_cluster_id    = "dr-cluster-id"
+    target_region        = "us-south"
+    target_brs_instance_guid = "dr-brs-guid"
+    target_brs_tenant_id     = "dr-tenant-id"
+    kubernetes_params = {
+      recovery_action = "RecoverNamespaces"
+      objects = [{
+        snapshot_id         = "snapshot-123"
+        protection_group_id = "pg-456"
+      }]
+      namespace_mapping = [{
+        source_namespace = "production"
+        target_namespace = "production-dr"
+      }]
+    }
+  }]
+
+  Supports full, selective, and cross-region recovery with namespace and storage class mapping.
   EOT
   type = list(object({
     name                 = string
     snapshot_environment = string # kKubernetes, kVMware, kPhysical, kAWS, kAzure, kGCP, kSQL, kOracle, kView, etc.
+
+    # Cross-region recovery parameters (restore to different IBM Cloud region)
+    target_cluster_id           = optional(string)
+    target_region               = optional(string)
+    target_resource_group_id    = optional(string)
+    target_brs_instance_guid    = optional(string)
+    target_brs_tenant_id        = optional(string)
+    target_connection_id        = optional(string)
+    target_endpoint_type        = optional(string, "private")
 
     # Kubernetes-specific recovery parameters
     kubernetes_params = optional(object({
@@ -869,6 +917,44 @@ variable "recoveries" {
         protection_group_name = optional(string)
         recover_from_standby  = optional(bool, false)
       }))
+
+      # Selective Recovery: Specify which resources to recover
+      # For selective recovery, specify resource types and names
+      selected_resources = optional(list(object({
+        resource_type = string # e.g., "Deployment", "StatefulSet", "ConfigMap", "Secret", "PVC"
+        resource_name = optional(string)
+        namespace     = optional(string)
+      })))
+
+      # Selective Recovery: Exclude specific resources
+      excluded_resources = optional(list(object({
+        resource_type = string
+        resource_name = optional(string)
+        namespace     = optional(string)
+      })))
+
+      # Full Recovery: Recover all namespaces (default behavior when no filters specified)
+      recover_all_namespaces = optional(bool, false)
+
+      # Cross-cluster recovery options
+      namespace_mapping = optional(list(object({
+        source_namespace = string
+        target_namespace = string
+      })))
+      
+      rename_recovered_resources = optional(bool, false)
+      resource_name_suffix       = optional(string)
+      resource_name_prefix       = optional(string)
+      
+      # Storage class mapping for cross-cluster recovery
+      storage_class_mapping = optional(list(object({
+        source_storage_class = string
+        target_storage_class = string
+      })))
+      
+      # Volume recovery options
+      preserve_pvc_names = optional(bool, true)
+      skip_pvc_recovery  = optional(bool, false)
     }))
 
     # VMware-specific recovery parameters (for future provider support)

@@ -803,18 +803,96 @@ resource "terraform_data" "delete_auto_protect_pg" {
 
 
 ##############################################################################
-# Restore the backups to Same or different cluster
+# Restore the backups - Full, Selective, or Cross-Region Recovery
 ##############################################################################
+# Recovery Types:
+# 1. Full Recovery: Restore all resources to the same cluster (no target_* params)
+# 2. Selective Recovery: Restore specific resources to same cluster (use selected_resources)
+# 3. Cross-Region Recovery: Restore to different IBM Cloud region (use target_region + target_brs_instance_guid)
+
+##############################################################################
+# Data Source: Fetch Available Snapshots for Recovery
+##############################################################################
+# This data source fetches all available snapshots from protection groups
+# Users can reference these snapshots in their recovery configuration
+
+data "ibm_backup_recovery_protection_group_run" "snapshots" {
+  for_each = {
+    for pg_name, pg_id in ibm_backup_recovery_protection_group.protection_group :
+    pg_name => pg_id.id
+  }
+
+  x_ibm_tenant_id      = local.brs_tenant_id
+  protection_group_id  = each.value
+  instance_id          = local.brs_instance_guid
+  region               = local.brs_instance_region
+  endpoint_type        = var.brs_endpoint_type
+  include_object_details = true
+
+  depends_on = [
+    ibm_backup_recovery_protection_group.protection_group,
+    time_sleep.wait_for_source_refresh
+  ]
+}
+
+# Data source for target cluster information (for cross-region recovery)
+data "ibm_container_vpc_cluster" "target_cluster" {
+  for_each = {
+    for recovery in var.recoveries :
+    recovery.name => recovery
+    if recovery.target_cluster_id != null && local.is_vpc
+  }
+
+  name              = each.value.target_cluster_id
+  resource_group_id = each.value.target_resource_group_id != null ? each.value.target_resource_group_id : var.cluster_resource_group_id
+}
+
+data "ibm_container_cluster" "target_cluster_classic" {
+  for_each = {
+    for recovery in var.recoveries :
+    recovery.name => recovery
+    if recovery.target_cluster_id != null && local.is_classic
+  }
+
+  name              = each.value.target_cluster_id
+  resource_group_id = each.value.target_resource_group_id != null ? each.value.target_resource_group_id : var.cluster_resource_group_id
+}
+
+# Data source for target BRS instance (for cross-region recovery)
+data "ibm_resource_instance" "target_brs_instance" {
+  for_each = {
+    for recovery in var.recoveries :
+    recovery.name => recovery
+    if recovery.target_brs_instance_guid != null
+  }
+
+  identifier = each.value.target_brs_instance_guid
+}
+
+locals {
+  # Helper to determine target cluster CRN for cross-region recovery
+  target_cluster_crns = {
+    for recovery in var.recoveries :
+    recovery.name => (
+      recovery.target_cluster_id != null ?
+      (local.is_vpc ?
+        try(data.ibm_container_vpc_cluster.target_cluster[recovery.name].crn, null) :
+        try(data.ibm_container_cluster.target_cluster_classic[recovery.name].crn, null)
+      ) : null
+    )
+  }
+}
 
 resource "ibm_backup_recovery" "recover_snapshot" {
   for_each = { for recovery in var.recoveries : recovery.name => recovery }
 
-  x_ibm_tenant_id      = local.brs_tenant_id
-  name                 = each.value.name
+  # Use target BRS instance if specified (cross-region), otherwise use source BRS instance
+  x_ibm_tenant_id = each.value.target_brs_tenant_id != null ? each.value.target_brs_tenant_id : local.brs_tenant_id
+  name            = each.value.name
   snapshot_environment = each.value.snapshot_environment
-  endpoint_type        = var.brs_endpoint_type
-  instance_id          = local.brs_instance_guid
-  region               = local.brs_instance_region
+  endpoint_type   = each.value.target_endpoint_type != null ? each.value.target_endpoint_type : var.brs_endpoint_type
+  instance_id     = each.value.target_brs_instance_guid != null ? each.value.target_brs_instance_guid : local.brs_instance_guid
+  region          = each.value.target_region != null ? each.value.target_region : local.brs_instance_region
 
   # Kubernetes-specific recovery parameters
   dynamic "kubernetes_params" {
@@ -822,7 +900,7 @@ resource "ibm_backup_recovery" "recover_snapshot" {
     content {
       recovery_action = kubernetes_params.value.recovery_action
 
-      # Objects to recover
+      # Objects to recover (Full or Selective)
       dynamic "objects" {
         for_each = kubernetes_params.value.objects
         content {
@@ -833,11 +911,83 @@ resource "ibm_backup_recovery" "recover_snapshot" {
           recover_from_standby  = objects.value.recover_from_standby
         }
       }
+
+      # Selective Recovery: Specify resources to include
+      dynamic "selected_resources" {
+        for_each = kubernetes_params.value.selected_resources != null ? kubernetes_params.value.selected_resources : []
+        content {
+          resource_type = selected_resources.value.resource_type
+          resource_name = selected_resources.value.resource_name
+          namespace     = selected_resources.value.namespace
+        }
+      }
+
+      # Selective Recovery: Specify resources to exclude
+      dynamic "excluded_resources" {
+        for_each = kubernetes_params.value.excluded_resources != null ? kubernetes_params.value.excluded_resources : []
+        content {
+          resource_type = excluded_resources.value.resource_type
+          resource_name = excluded_resources.value.resource_name
+          namespace     = excluded_resources.value.namespace
+        }
+      }
+
+      # Cross-region recovery: Namespace mapping
+      dynamic "namespace_mapping" {
+        for_each = kubernetes_params.value.namespace_mapping != null ? kubernetes_params.value.namespace_mapping : []
+        content {
+          source_namespace = namespace_mapping.value.source_namespace
+          target_namespace = namespace_mapping.value.target_namespace
+        }
+      }
+
+      # Cross-region recovery: Storage class mapping
+      dynamic "storage_class_mapping" {
+        for_each = kubernetes_params.value.storage_class_mapping != null ? kubernetes_params.value.storage_class_mapping : []
+        content {
+          source_storage_class = storage_class_mapping.value.source_storage_class
+          target_storage_class = storage_class_mapping.value.target_storage_class
+        }
+      }
+
+      # Note: The following advanced recovery features are defined in variables
+      # but not yet supported by the IBM Backup Recovery provider. They will be automatically
+      # enabled when provider support is added:
+      # - rename_recovered_resources
+      # - resource_name_suffix / resource_name_prefix
+      # - preserve_pvc_names
+      # - skip_pvc_recovery
+      #
+      # Currently supported recovery features:
+      # - Full Recovery: Restore all resources to same cluster
+      # - Selective Recovery: Filter by selected_resources/excluded_resources
+      # - Cross-Region Recovery: target_region + target_brs_instance_guid + namespace_mapping + storage_class_mapping
     }
   }
 
   depends_on = [
     ibm_backup_recovery_protection_group.protection_group,
-    ibm_backup_recovery_source_registration.source_registration
+    ibm_backup_recovery_source_registration.source_registration,
+    data.ibm_container_vpc_cluster.target_cluster,
+    data.ibm_container_cluster.target_cluster_classic,
+    data.ibm_resource_instance.target_brs_instance
   ]
+
+  lifecycle {
+    precondition {
+      condition = (
+        each.value.target_cluster_id == null ||
+        (each.value.target_cluster_id != null && each.value.kubernetes_params != null)
+      )
+      error_message = "Cross-region recovery requires kubernetes_params to be specified."
+    }
+
+    precondition {
+      condition = (
+        each.value.target_region == null ||
+        (each.value.target_region != null && each.value.target_brs_instance_guid != null && each.value.target_cluster_id != null)
+      )
+      error_message = "Cross-region recovery requires target_cluster_id and target_brs_instance_guid to be specified."
+    }
+  }
 }

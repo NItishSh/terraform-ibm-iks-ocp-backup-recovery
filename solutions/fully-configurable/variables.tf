@@ -587,3 +587,103 @@ variable "policies" {
     error_message = "The tiering configuration block must match the selected cloud_platform (e.g., provide 'aws_tiering' for 'AWS')."
   }
 }
+
+##############################################################################
+# Protection Groups Variables
+##############################################################################
+
+variable "protection_groups" {
+  description = "List of protection groups for granular backup control. Each group selects specific namespaces/objects and applies a policy."
+  type = list(object({
+    name        = string
+    policy_name = string
+    description = optional(string)
+
+    enable_indexing       = optional(bool, true)
+    leverage_csi_snapshot = optional(bool, false)
+    non_snapshot_backup   = optional(bool, false)
+    volume_backup_failure = optional(bool, false)
+
+    objects = optional(list(object({
+      id                          = optional(number)
+      name                        = optional(string)
+      backup_only_pvc             = optional(bool, false)
+      fail_backup_on_hook_failure = optional(bool, false)
+      included_resources          = optional(list(string))
+      excluded_resources          = optional(list(string))
+    })))
+
+    priority           = optional(string, "kMedium")
+    qos_policy         = optional(string)
+    is_paused          = optional(bool, false)
+    abort_in_blackouts = optional(bool, false)
+    pause_in_blackouts = optional(bool, false)
+  }))
+  default = []
+}
+
+##############################################################################
+# Recovery Variables
+##############################################################################
+
+variable "recoveries" {
+  description = <<-EOT
+  List of recovery operations to restore backups. Supports Full, Selective, and Cross-Region recovery.
+  
+  Recovery Types:
+  1. Full Recovery - Restore all resources to same cluster (no target_* params)
+  2. Selective Recovery - Restore specific resources (use selected_resources)
+  3. Cross-Region Recovery - Restore to different region (use target_region + target_brs_instance_guid)
+  
+  For Deployable Architecture, recovery is typically triggered manually when needed.
+  EOT
+  type = list(object({
+    name                 = string
+    snapshot_environment = string
+
+    # Cross-region recovery parameters
+    target_cluster_id           = optional(string)
+    target_region               = optional(string)
+    target_resource_group_id    = optional(string)
+    target_brs_instance_guid    = optional(string)
+    target_brs_tenant_id        = optional(string)
+    target_endpoint_type        = optional(string, "private")
+
+    kubernetes_params = optional(object({
+      recovery_action = string
+
+      objects = list(object({
+        snapshot_id           = string
+        point_in_time_usecs   = optional(number)
+        protection_group_id   = optional(string)
+        protection_group_name = optional(string)
+        recover_from_standby  = optional(bool, false)
+      }))
+
+      # Selective recovery
+      selected_resources = optional(list(object({
+        resource_type = string
+        resource_name = optional(string)
+        namespace     = optional(string)
+      })))
+
+      excluded_resources = optional(list(object({
+        resource_type = string
+        resource_name = optional(string)
+        namespace     = optional(string)
+      })))
+
+      # Cross-region recovery
+      namespace_mapping = optional(list(object({
+        source_namespace = string
+        target_namespace = string
+      })))
+
+      storage_class_mapping = optional(list(object({
+        source_storage_class = string
+        target_storage_class = string
+      })))
+    }))
+  }))
+  default = []
+}

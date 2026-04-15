@@ -57,3 +57,34 @@ output "brs_tags" {
   description = "BRS tags that should be added to the cluster to prevent tag drift. Include these in your cluster's tags input."
   value       = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]
 }
+
+output "available_snapshots" {
+  description = "Available snapshots from protection groups that can be used for recovery. Each protection group shows its latest snapshots with IDs."
+  value = {
+    for pg_name, pg_data in data.ibm_backup_recovery_protection_group_run.snapshots :
+    pg_name => {
+      protection_group_id = pg_data.protection_group_id
+      runs = try([
+        for run in pg_data.runs : {
+          id                = run.id
+          snapshot_id       = try(run.local_backup_info[0].snapshot_info[0].snapshot_id, null)
+          start_time        = run.local_backup_info[0].start_time_usecs
+          end_time          = run.local_backup_info[0].end_time_usecs
+          status            = run.local_backup_info[0].run_type
+          is_successful     = run.is_local_snapshots_deleted == false
+        }
+      ], [])
+    }
+  }
+}
+
+output "latest_snapshot_ids" {
+  description = "Latest snapshot ID for each protection group - use these for recovery"
+  value = {
+    for pg_name, pg_data in data.ibm_backup_recovery_protection_group_run.snapshots :
+    pg_name => try(
+      pg_data.runs[0].local_backup_info[0].snapshot_info[0].snapshot_id,
+      "No snapshots available yet"
+    )
+  }
+}

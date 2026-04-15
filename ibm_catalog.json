@@ -26,8 +26,8 @@
         "solution",
         "ibm backup and recovery"
       ],
-      "short_description": "Enables enterprise-grade backup and recovery for existing IKS and Red Hat OpenShift clusters on IBM Cloud using IBM Backup & Recovery Service with a fully configurable option.",
-      "long_description": "This solution integrates IBM Backup & Recovery Service with existing Red Hat OpenShift on IBM Cloud clusters. It automates the deployment of the Data Source Connector (DSC), cluster registration, security group rules, and protection policies to safeguard namespaces, persistent volumes, and other cluster resources.\n\nThe **fully configurable option** is available, designed for production-grade deployments that require fine-grained control and customization. It leverages reusable Terraform IBM Modules to ensure consistency, best practices, and maintainability.\n\nYou can further extend this architecture by incorporating additional Terraform IBM Modules (https://github.com/terraform-ibm-modules) to add observability, enhanced security, compliance features, or other capabilities as needed.",
+      "short_description": "Enables enterprise-grade backup and recovery for existing IKS and Red Hat OpenShift clusters on IBM Cloud using IBM Backup & Recovery Service with full, selective, and cross-region recovery capabilities.",
+      "long_description": "This solution integrates IBM Backup & Recovery Service with existing Red Hat OpenShift on IBM Cloud clusters. It automates the deployment of the Data Source Connector (DSC), cluster registration, security group rules, and protection policies to safeguard namespaces, persistent volumes, and other cluster resources.\n\nThe solution provides comprehensive recovery capabilities including:\n- **Full Recovery**: Restore all resources from a protection group\n- **Selective Recovery**: Restore specific namespaces or resources\n- **Cross-Region Recovery**: Restore to a different cluster in another region\n\nThe **fully configurable option** is available, designed for production-grade deployments that require fine-grained control and customization. It leverages reusable Terraform IBM Modules to ensure consistency, best practices, and maintainability.\n\nYou can further extend this architecture by incorporating additional Terraform IBM Modules (https://github.com/terraform-ibm-modules) to add observability, enhanced security, compliance features, or other capabilities as needed.",
       "offering_docs_url": "https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks",
       "offering_icon_url": "https://raw.githubusercontent.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/main/images/backup-recovery-icon.svg",
       "provider_name": "IBM",
@@ -35,6 +35,14 @@
         {
           "title": "Red Hat OpenShift Backup and Recovery Integration",
           "description": "Automates the deployment of IBM Backup & Recovery Service integration for existing Red Hat OpenShift clusters on IBM Cloud. This includes deploying the Data Source Connector (DSC) via Helm, creating necessary Kubernetes resources, configuring outbound security group rules, registering the cluster, and applying a customizable protection policy. [Learn more](https://cloud.ibm.com/docs/backup-recovery?topic=backup-recovery-data-source-connector-iks-roks)."
+        },
+        {
+          "title": "Comprehensive Recovery Operations",
+          "description": "Supports multiple recovery scenarios including full recovery (restore all resources), selective recovery (restore specific namespaces or resources), and cross-region recovery (restore to a different cluster in another region). Automatic snapshot management simplifies recovery operations."
+        },
+        {
+          "title": "Protection Groups and Policies",
+          "description": "Create multiple protection groups with custom backup policies. Support for namespace-based and label-based resource selection with configurable backup schedules and retention policies."
         }
       ],
       "support_details": "This product is in the community registry. As such support is handled through the originated repo. If you experience issues, please open an issue in the repository [here](https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/issues). Please note this product is not supported via the IBM Cloud Support Center.",
@@ -49,23 +57,17 @@
           "release_notes_url": "https://github.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/releases",
           "iam_permissions": [
             {
-              "role_crns": [
-                "crn:v1:bluemix:public:iam::::role:Editor"
-              ],
+              "role_crns": ["crn:v1:bluemix:public:iam::::role:Editor"],
               "service_name": "containers-kubernetes",
               "notes": "Required to deploy helm charts and manage Kubernetes resources on IKS and Red Hat OpenShift clusters."
             },
             {
-              "role_crns": [
-                "crn:v1:bluemix:public:iam::::role:Editor"
-              ],
+              "role_crns": ["crn:v1:bluemix:public:iam::::role:Editor"],
               "service_name": "is.vpc",
               "notes": "Required for creating Security group rules in Virtual Private Cloud(VPC)."
             },
             {
-              "role_crns": [
-                "crn:v1:bluemix:public:iam::::role:Editor"
-              ],
+              "role_crns": ["crn:v1:bluemix:public:iam::::role:Editor"],
               "service_name": "backup-recovery",
               "notes": "Required to create and manage Backup and Recovery policy, source registration and protection group."
             }
@@ -84,7 +86,7 @@
                   "url": "https://raw.githubusercontent.com/terraform-ibm-modules/terraform-ibm-iks-ocp-backup-recovery/main/reference-architectures/architecture_diagram.svg",
                   "type": "image/svg+xml"
                 },
-                "description": "This architecture integrates an existing <b>Red Hat OpenShift cluster</b> with <b>IBM Backup & Recovery Service</b>. The solution deploys the <b>Data Source Connector (DSC)</b> via Helm, creates necessary Kubernetes resources, optionally configures outbound security group rules, registers the cluster, and applies a fully customizable protection policy.<br><br>Backups are stored in IBM Cloud Object Storage (managed by the Backup & Recovery instance) with options for immutable storage (WORM) to meet compliance requirements. This enables reliable point-in-time recovery of applications, data, and cluster configurations."
+                "description": "This architecture integrates an existing <b>Red Hat OpenShift cluster</b> with <b>IBM Backup & Recovery Service</b>. The solution deploys the <b>Data Source Connector (DSC)</b> via Helm, creates necessary Kubernetes resources, optionally configures outbound security group rules, registers the cluster, and applies a fully customizable protection policy.<br><br>Backups are stored in IBM Cloud Object Storage (managed by the Backup & Recovery instance) with options for immutable storage (WORM) to meet compliance requirements. This enables reliable point-in-time recovery of applications, data, and cluster configurations.<br><br>The solution supports <b>full recovery</b> (restore all resources), <b>selective recovery</b> (restore specific namespaces), and <b>cross-region recovery</b> (restore to a different cluster/region) with automatic snapshot management for simplified operations."
               }
             ]
           },
@@ -306,9 +308,7 @@
                 "grouping": "deployment",
                 "original_grouping": "deployment",
                 "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
+                  "supportedLanguages": ["hcl"]
                 }
               }
             },
@@ -344,9 +344,31 @@
                 "grouping": "deployment",
                 "original_grouping": "deployment",
                 "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
+                  "supportedLanguages": ["hcl"]
+                }
+              }
+            },
+            {
+              "key": "protection_groups",
+              "display_name": "Protection Groups",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": ["hcl"]
+                }
+              }
+            },
+            {
+              "key": "recoveries",
+              "display_name": "Recovery Operations",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": ["hcl"]
                 }
               }
             },

@@ -65,6 +65,10 @@ module "protect_cluster" {
   enable_auto_protect = var.enable_auto_protect
   # --- Policies ---
   policies = var.policies
+  # --- Protection Groups ---
+  protection_groups = var.protection_groups
+  # --- Recovery ---
+  recoveries = var.recoveries
   # --- Resource Tags ---
   resource_tags = var.resource_tags
   access_tags   = var.access_tags

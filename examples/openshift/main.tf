@@ -194,6 +194,130 @@ module "backup_recover_protect_ocp" {
   resource_tags            = var.resource_tags
   # Disable automatic tag addition to prevent drift with ocp_base module
   add_cluster_tags = false
+
+  # ========================================
+  # Recovery Examples (Uncomment to use)
+  # ========================================
+  # Recovery Types:
+  # 1. Full Recovery - Restore all resources to same cluster
+  # 2. Selective Recovery - Restore specific resources only
+  # 3. Cross-Region Recovery - Restore to different IBM Cloud region
+
+  # Example 1: Full Recovery (Same Cluster)
+  # Restore entire namespace with all resources
+  # recoveries = [{
+  #   name                 = "full-recovery-same-cluster"
+  #   snapshot_environment = "kKubernetes"
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverNamespaces"
+  #     objects = [{
+  #       snapshot_id         = "snapshot-12345"
+  #       protection_group_id = "pg-67890"
+  #     }]
+  #   }
+  # }]
+
+  # Example 2: Selective Recovery (Same Cluster)
+  # Restore only specific resource types
+  # recoveries = [{
+  #   name                 = "selective-recovery-deployments-only"
+  #   snapshot_environment = "kKubernetes"
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverApps"
+  #     objects = [{
+  #       snapshot_id         = "snapshot-12345"
+  #       protection_group_id = "pg-67890"
+  #     }]
+  #     selected_resources = [
+  #       {
+  #         resource_type = "Deployment"
+  #         resource_name = "my-app"
+  #         namespace     = "production"
+  #       },
+  #       {
+  #         resource_type = "Route"
+  #         namespace     = "production"
+  #       }
+  #     ]
+  #   }
+  # }]
+
+  # Example 3: Cross-Region Recovery
+  # Restore to a different IBM Cloud region for disaster recovery
+  # recoveries = [{
+  #   name                 = "cross-region-disaster-recovery"
+  #   snapshot_environment = "kKubernetes"
+  #
+  #   # Target region configuration
+  #   target_cluster_id        = "dr-cluster-id"
+  #   target_region            = "us-south"
+  #   target_resource_group_id = module.resource_group.resource_group_id
+  #   target_brs_instance_guid = "target-brs-guid"
+  #   target_brs_tenant_id     = "target-tenant-id"
+  #   target_endpoint_type     = "private"
+  #
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverNamespaces"
+  #     objects = [{
+  #       # Automatically uses latest snapshot from source region
+  #       snapshot_id         = module.backup_recover_protect_ocp.latest_snapshot_ids["protection-group-name"]
+  #       protection_group_id = "pg-67890"
+  #     }]
+  #
+  #     # Map namespaces for DR scenario
+  #     namespace_mapping = [{
+  #       source_namespace = "production"
+  #       target_namespace = "production-dr"
+  #     }]
+  #
+  #     # Map storage classes if different in target region
+  #     storage_class_mapping = [{
+  #       source_storage_class = var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier"
+  #       target_storage_class = "ibmc-vpc-block-metro-retain-5iops-tier"
+  #     }]
+  #   }
+  # }]
+
+  # Example 4: Point-in-Time Recovery
+  # Restore to a specific point in time
+  # recoveries = [{
+  #   name                 = "point-in-time-recovery"
+  #   snapshot_environment = "kKubernetes"
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverNamespaces"
+  #     objects = [{
+  #       snapshot_id         = "snapshot-12345"
+  #       point_in_time_usecs = 1640995200000000  # Unix timestamp in microseconds
+  #       protection_group_id = "pg-67890"
+  #     }]
+  #   }
+  # }]
+
+  # Example 5: Exclude Specific Resources During Recovery
+  # Restore namespace but exclude certain resources
+  # recoveries = [{
+  #   name                 = "recovery-with-exclusions"
+  #   snapshot_environment = "kKubernetes"
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverNamespaces"
+  #     objects = [{
+  #       snapshot_id         = "snapshot-12345"
+  #       protection_group_id = "pg-67890"
+  #     }]
+  #     excluded_resources = [
+  #       {
+  #         resource_type = "Secret"
+  #         namespace     = "production"
+  #       },
+  #       {
+  #         resource_type = "ConfigMap"
+  #         resource_name = "temp-config"
+  #         namespace     = "production"
+  #       }
+  #     ]
+  #   }
+  # }]
+  # ========================================
 }
 
 ##############################################################################
