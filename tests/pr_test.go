@@ -155,18 +155,23 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
 		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
-		{Name: "policy", Value: map[string]interface{}{
-			"name": fmt.Sprintf("%s-policy", prefix),
-			"schedule": map[string]interface{}{
-				"unit":      "Hours",
-				"frequency": 6,
+		{Name: "policies", Value: []map[string]interface{}{
+			{
+				"name":              fmt.Sprintf("%s-policy", prefix),
+				"create_new_policy": true,
+				"schedule": map[string]interface{}{
+					"unit": "Hours",
+					"hour_schedule": map[string]interface{}{
+						"frequency": 6,
+					},
+				},
+				"retention": map[string]interface{}{
+					"duration": 4,
+					"unit":     "Weeks",
+				},
+				"use_default_backup_target": true,
 			},
-			"retention": map[string]interface{}{
-				"duration": 4,
-				"unit":     "Weeks",
-			},
-			"use_default_backup_target": true,
-		}, DataType: "object"},
+		}, DataType: "list"},
 	}
 }
 
