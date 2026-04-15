@@ -45,7 +45,8 @@ locals {
   ))) : toset([])
 
   resolved_policy_ids = {
-    for k, v in data.ibm_backup_recovery_protection_policies.existing_policies : k => v.policies[0].id
+    for k, v in data.ibm_backup_recovery_protection_policies.existing_policies : k => one(v.policies[*].id)
+    if length(v.policies) > 0
   }
 }
 
