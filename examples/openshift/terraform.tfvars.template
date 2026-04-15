@@ -1,0 +1,62 @@
+##############################################################################
+# Terraform Variables Template for OpenShift Backup & Recovery Example
+##############################################################################
+# Copy this file to terraform.tfvars and fill in your values
+# cp terraform.tfvars.template terraform.tfvars
+##############################################################################
+
+##############################################################################
+# Required Variables
+##############################################################################
+
+# IBM Cloud API Key (Required)
+# Get your API key from: https://cloud.ibm.com/iam/apikeys
+ibmcloud_api_key = "your-ibm-cloud-api-key-here"
+
+# Prefix for all resource names (Required)
+# This will be used to name your cluster, BRS instance, etc.
+# Must begin and end with a letter and contain only letters, numbers, and hyphens
+prefix = "test-ocp-recovery"
+
+# OpenShift entitlement (Required for OpenShift)
+# Options: "cloud_pak" or "null"
+# Use "cloud_pak" if you have an OpenShift entitlement
+ocp_entitlement = "cloud_pak"
+
+##############################################################################
+# Optional Variables (Uncomment to customize)
+##############################################################################
+
+# Region where resources will be created
+# Default: "us-east"
+# region = "us-east"
+
+# Existing resource group name (if you want to use an existing one)
+# If not specified, a new resource group will be created
+# resource_group = "my-existing-resource-group"
+
+# Existing cluster name/ID (if you want to use an existing cluster)
+# If not specified, a new cluster will be created
+# cluster_name_id = "my-existing-ocp-cluster"
+
+# Existing BRS instance CRN (if you want to use an existing BRS instance)
+# If not specified, a new BRS instance will be created
+# existing_brs_instance_crn = "crn:v1:bluemix:public:backup-recovery:us-east:a/..."
+
+# Storage class for Data Source Connector
+# Default: "ibmc-vpc-block-metro-5iops-tier" for VPC, "ibmc-block-silver" for Classic
+# dsc_storage_class = "ibmc-vpc-block-metro-5iops-tier"
+
+# Create Classic cluster instead of VPC cluster
+# Default: false (creates VPC cluster)
+# classic_cluster = false
+
+# Datacenter for Classic cluster (only used if classic_cluster = true)
+# Default: "dal10"
+# datacenter = "dal10"
+
+# Resource tags to apply to created resources
+# resource_tags = ["env:test", "owner:myteam"]
+
+# Access tags for access management
+# access_tags = ["project:backup-recovery"]
