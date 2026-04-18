@@ -1,11 +1,15 @@
 # Retrieve information about an existing VPC cluster
-resource "time_sleep" "wait_before_cluster_config_download" {
-  create_duration = "15m"
-
-  triggers = {
+# Wait for cluster to be ready before downloading config
+resource "terraform_data" "wait_for_cluster_ready" {
+  triggers_replace = {
     cluster_id     = var.cluster_id
     endpoint_type  = var.cluster_config_endpoint_type
     resource_group = var.cluster_resource_group_id
+  }
+
+  provisioner "local-exec" {
+    command     = "${path.module}/../../scripts/wait_for_cluster_ready.sh '${var.cluster_id}' '${var.cluster_resource_group_id}'"
+    interpreter = ["/bin/bash", "-c"]
   }
 }
 
@@ -16,7 +20,7 @@ data "ibm_container_cluster_config" "cluster_config" {
   endpoint_type     = var.cluster_config_endpoint_type != "default" ? var.cluster_config_endpoint_type : null
   admin             = true
 
-  depends_on = [time_sleep.wait_before_cluster_config_download]
+  depends_on = [terraform_data.wait_for_cluster_ready]
 }
 
 module "existing_brs_crn_parser" {
@@ -73,7 +77,7 @@ module "protect_cluster" {
 ########################################################################################################################
 # Cleanup BRS-agent runtime resources on destroy
 # BRS agent creates a namespace and ClusterRoleBinding (brs-backup-agent-<uuid>) that Terraform does not manage.
-# This null_resource runs a local-exec on destroy to clean them up.
+# This terraform_data resource runs a local-exec on destroy to clean them up.
 #
 # Cluster credentials (host, CA, cert, key) are stored in triggers at apply time so they are available
 # at destroy time without any dependency on kubeconfig files on disk.
@@ -81,8 +85,8 @@ module "protect_cluster" {
 # are unreliable. Storing credentials in triggers is the only reliable approach.
 # Note: these values are already present in Terraform state via the data source; Schematics encrypts state.
 ########################################################################################################################
-resource "null_resource" "cleanup_brs_agent_resources" {
-  triggers = {
+resource "terraform_data" "cleanup_brs_agent_resources" {
+  triggers_replace = {
     cluster_id = var.cluster_id
     kube_host  = data.ibm_container_cluster_config.cluster_config.host
     kube_ca    = data.ibm_container_cluster_config.cluster_config.ca_certificate
@@ -92,48 +96,7 @@ resource "null_resource" "cleanup_brs_agent_resources" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = <<-EOT
-      echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
-
-      if ! command -v kubectl >/dev/null 2>&1; then
-        echo "kubectl not found; skipping BRS-agent cleanup."
-        exit 0
-      fi
-
-      # Build a temporary kubeconfig from stored cluster credentials.
-      # Use PEM files plus explicit kubectl TLS flags so we do not need inline kubeconfig YAML.
-      TMPDIR=$(mktemp -d /tmp/brs-cleanup-XXXXXX)
-      trap 'rm -rf "$TMPDIR"' EXIT
-
-      printf '%s\n' "${self.triggers.kube_ca}" > "$TMPDIR/ca.pem"
-      printf '%s\n' "${self.triggers.kube_cert}" > "$TMPDIR/client.crt"
-      printf '%s\n' "${self.triggers.kube_key}" > "$TMPDIR/client.key"
-
-      kctl() {
-        kubectl \
-          --server="${self.triggers.kube_host}" \
-          --certificate-authority="$TMPDIR/ca.pem" \
-          --client-certificate="$TMPDIR/client.crt" \
-          --client-key="$TMPDIR/client.key" \
-          "$@"
-      }
-
-      if ! kctl version --request-timeout=15s >/dev/null 2>&1; then
-        echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
-        exit 0
-      fi
-
-      # Delete by runtime-generated naming pattern.
-      kctl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
-        [ -n "$ns" ] && kctl delete namespace "$ns" --ignore-not-found=true
-      done
-
-      kctl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
-        [ -n "$crb" ] && kctl delete clusterrolebinding "$crb" --ignore-not-found=true
-      done
-
-      echo "Cleanup complete."
-    EOT
+    command = "${path.module}/../../scripts/cleanup_brs_agent_resources_schematics.sh \"${self.triggers_replace.kube_host}\" \"${self.triggers_replace.kube_ca}\" \"${self.triggers_replace.kube_cert}\" \"${self.triggers_replace.kube_key}\""
   }
 
   depends_on = [

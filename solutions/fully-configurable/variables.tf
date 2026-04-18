@@ -250,6 +250,7 @@ variable "connection_env_type" {
     error_message = "`connection_env_type` must be 'kIksVpc', 'kIksClassic', 'kRoksVpc', or 'kRoksClassic'."
   }
 }
+
 variable "policies" {
   description = "A list of protection policies to create or look up. Set `create_new_policy` to `true` (default) to create a new policy with the specified `schedule` and `retention`. Set `create_new_policy` to `false` to reference an existing policy by `name`."
   type = list(object({
