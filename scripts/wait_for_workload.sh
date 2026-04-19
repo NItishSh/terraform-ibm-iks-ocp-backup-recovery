@@ -62,4 +62,3 @@ else
   exit 1
 fi
 
-# Made with Bob

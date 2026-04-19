@@ -94,5 +94,3 @@ kctl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-back
 done
 
 echo "Cleanup complete."
-
-# Made with Bob

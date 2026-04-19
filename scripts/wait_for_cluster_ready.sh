@@ -49,4 +49,3 @@ echo "✗ Error: Cluster did not become ready within $((MAX_ATTEMPTS * SLEEP_DUR
 echo "Last known state: $CLUSTER_STATE"
 exit 1
 
-# Made with Bob
