@@ -329,40 +329,18 @@ module "backup_recover_protect_iks" {
 ##############################################################################
 # BRS agent creates namespaces and CRBs dynamically at runtime that Terraform
 # doesn't manage. This cleanup resource ensures they are deleted during destroy.
-resource "null_resource" "cleanup_brs_agent_resources" {
-  triggers = {
-    kubeconfig = data.ibm_container_cluster_config.cluster_config.config_file_path
+resource "terraform_data" "cleanup_brs_agent_resources" {
+  triggers_replace = {
+    cluster_id = var.cluster_name_id
+    kube_host  = data.ibm_container_cluster_config.cluster_config.host
+    kube_ca    = data.ibm_container_cluster_config.cluster_config.ca_certificate
+    kube_cert  = data.ibm_container_cluster_config.cluster_config.admin_certificate
+    kube_key   = data.ibm_container_cluster_config.cluster_config.admin_key
   }
 
   provisioner "local-exec" {
-    when = destroy
-    environment = {
-      KUBECONFIG = self.triggers.kubeconfig
-    }
-    command = <<-EOT
-      echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
-
-      if ! command -v kubectl >/dev/null 2>&1; then
-        echo "kubectl not found; skipping BRS-agent cleanup."
-        exit 0
-      fi
-
-      if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
-        echo "kubectl cannot reach the target cluster; BRS-agent cleanup did not run."
-        exit 1
-      fi
-
-      # Delete by runtime-generated naming pattern.
-      kubectl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
-        [ -n "$ns" ] && kubectl delete namespace "$ns" --ignore-not-found=true || true
-      done
-
-      kubectl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
-        [ -n "$crb" ] && kubectl delete clusterrolebinding "$crb" --ignore-not-found=true || true
-      done
-
-      echo "Cleanup complete."
-    EOT
+    when    = destroy
+    command = "${path.module}/../../scripts/cleanup_brs_agent_resources_schematics.sh \"${self.triggers_replace.kube_host}\" \"${self.triggers_replace.kube_ca}\" \"${self.triggers_replace.kube_cert}\" \"${self.triggers_replace.kube_key}\""
   }
 
   depends_on = [

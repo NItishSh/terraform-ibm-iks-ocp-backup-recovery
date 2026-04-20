@@ -204,7 +204,7 @@ resource "helm_release" "data_source_connector" {
   namespace        = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
   version          = local.dsc_chart_version
   create_namespace = false
-  timeout          = var.dsc_helm_timeout * var.dsc_replicas
+  timeout          = var.dsc_helm_timeout
   wait             = true
   atomic           = true
 

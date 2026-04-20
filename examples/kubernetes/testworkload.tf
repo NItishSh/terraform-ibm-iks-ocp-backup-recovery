@@ -116,8 +116,6 @@ resource "kubernetes_deployment_v1" "test_app_with_pvc" {
       }
     }
   }
-
-  depends_on = [kubernetes_persistent_volume_claim_v1.test_app_pvc]
 }
 
 ########################################################################################################################
@@ -181,11 +179,33 @@ resource "kubernetes_deployment_v1" "test_app_without_pvc" {
 # Wait for Workload Stabilization
 ########################################################################################################################
 
-# Wait for workload to stabilize before proceeding with protection group creation
-resource "time_sleep" "wait_for_workload" {
+# Wait for workload deployments to be ready before proceeding with protection group creation
+resource "terraform_data" "wait_for_workload" {
+  triggers_replace = {
+    namespace           = kubernetes_namespace_v1.workload_ns.metadata[0].name
+    deployment_with_pvc = kubernetes_deployment_v1.test_app_with_pvc.metadata[0].name
+    deployment_no_pvc   = kubernetes_deployment_v1.test_app_without_pvc.metadata[0].name
+    kubeconfig          = data.ibm_container_cluster_config.cluster_config.config_file_path
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      ${path.module}/../../scripts/wait_for_workload.sh \
+        "${self.triggers_replace.kubeconfig}" \
+        "${self.triggers_replace.namespace}" \
+        "${self.triggers_replace.deployment_with_pvc}" \
+        300
+
+      ${path.module}/../../scripts/wait_for_workload.sh \
+        "${self.triggers_replace.kubeconfig}" \
+        "${self.triggers_replace.namespace}" \
+        "${self.triggers_replace.deployment_no_pvc}" \
+        300
+    EOT
+  }
+
   depends_on = [
     kubernetes_deployment_v1.test_app_with_pvc,
     kubernetes_deployment_v1.test_app_without_pvc
   ]
-  create_duration = "90s"
 }
