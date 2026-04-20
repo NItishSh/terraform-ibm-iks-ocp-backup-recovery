@@ -24,12 +24,12 @@ COUNTER=0
 
 while [[ $COUNTER -lt $MAX_ATTEMPTS ]]; do
     COUNTER=$((COUNTER + 1))
-    
+
     echo "Attempt $COUNTER/$MAX_ATTEMPTS: Checking cluster state..."
-    
+
     # Get cluster state using ibmcloud CLI
     CLUSTER_STATE=$(ibmcloud ks cluster get --cluster "$CLUSTER_ID" --output json 2>/dev/null | jq -r '.state // "unknown"')
-    
+
     if [ "$CLUSTER_STATE" = "normal" ]; then
         echo "✓ Cluster is ready (state: $CLUSTER_STATE)"
         exit 0
@@ -38,7 +38,7 @@ while [[ $COUNTER -lt $MAX_ATTEMPTS ]]; do
     else
         echo "⏳ Cluster state: $CLUSTER_STATE (waiting for 'normal')"
     fi
-    
+
     if [[ $COUNTER -lt $MAX_ATTEMPTS ]]; then
         echo "Waiting ${SLEEP_DURATION}s before next check..."
         sleep $SLEEP_DURATION
@@ -48,4 +48,3 @@ done
 echo "✗ Error: Cluster did not become ready within $((MAX_ATTEMPTS * SLEEP_DURATION / 60)) minutes"
 echo "Last known state: $CLUSTER_STATE"
 exit 1
-

@@ -61,4 +61,3 @@ else
   kubectl get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o wide || true
   exit 1
 fi
-

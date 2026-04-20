@@ -63,7 +63,7 @@ printf '%s\n' "$KUBE_KEY" > "$TMPDIR/client.key"
 kctl() {
   kubectl \
     --server="$KUBE_HOST" \
-    $CA_ARG \
+    "$CA_ARG" \
     --client-certificate="$TMPDIR/client.crt" \
     --client-key="$TMPDIR/client.key" \
     "$@"
