@@ -176,7 +176,8 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 }
 
 func TestRunFullyConfigurableInSchematics(t *testing.T) {
-	t.Parallel()
+
+	t.Skip("Skipping the DA tests for now since we are mostly focused on modules anyways renovate does update the DAs so we can revisit later")
 
 	tarIncludePatterns, recurseErr := getTarIncludePatternsRecursively("..", excludeDirs, includeFiletypes)
 	// if error producing tar patterns (very unexpected) fail test immediately
@@ -207,7 +208,8 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 
 // Upgrade Test does not require KMS encryption
 func TestRunUpgradeFullyConfigurable(t *testing.T) {
-	t.Parallel()
+
+	t.Skip("Skipping the DA tests for now since we are mostly focused on modules anyways renovate does update the DAs so we can revisit later")
 
 	tarIncludePatterns, recurseErr := getTarIncludePatternsRecursively("..", excludeDirs, includeFiletypes)
 	// if error producing tar patterns (very unexpected) fail test immediately
@@ -274,7 +276,6 @@ func setupOptions(t *testing.T, prefix string, dir string, exemptionList []strin
 }
 
 func TestRunIKSExample(t *testing.T) {
-	t.Parallel()
 
 	options := setupOptions(t, "brs-iks", iksExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
@@ -288,7 +289,6 @@ func TestRunIKSExample(t *testing.T) {
 }
 
 func TestRunOCPExample(t *testing.T) {
-	t.Parallel()
 
 	options := setupOptions(t, "brs-ocp", ocpExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",

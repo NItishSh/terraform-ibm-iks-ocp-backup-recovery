@@ -4,7 +4,7 @@
 
 module "resource_group" {
   source  = "terraform-ibm-modules/resource-group/ibm"
-  version = "1.5.0"
+  version = "1.6.0"
   # if an existing resource group is not set (null) create a new one using prefix
   resource_group_name          = var.resource_group == null ? "${var.prefix}-resource-group" : null
   existing_resource_group_name = var.resource_group
@@ -78,7 +78,7 @@ locals {
 
 module "ocp_base" {
   source               = "terraform-ibm-modules/base-ocp-vpc/ibm"
-  version              = "3.83.0"
+  version              = "3.85.2"
   resource_group_id    = module.resource_group.resource_group_id
   region               = var.region
   tags                 = var.resource_tags
@@ -93,14 +93,14 @@ module "ocp_base" {
 
 module "crn_parser" {
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
-  version = "1.4.2"
+  version = "1.5.0"
   count   = local.existing_brs_instance_crn == null ? 0 : 1
   crn     = local.existing_brs_instance_crn
 }
 
 module "backup_recovery_instance" {
   source                    = "terraform-ibm-modules/backup-recovery/ibm"
-  version                   = "v1.7.2"
+  version                   = "v1.9.0"
   region                    = local.brs_region
   resource_group_id         = module.resource_group.resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key

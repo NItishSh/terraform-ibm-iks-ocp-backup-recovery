@@ -47,7 +47,7 @@ module "crn_parser" {
   count = var.existing_brs_instance_crn == null ? 0 : 1
 
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
-  version = "1.4.2"
+  version = "1.5.0"
   crn     = var.existing_brs_instance_crn
 }
 
@@ -57,7 +57,7 @@ module "crn_parser" {
 
 module "backup_recovery_instance" {
   source                    = "terraform-ibm-modules/backup-recovery/ibm"
-  version                   = "1.8.0"
+  version                   = "v1.9.0"
   region                    = local.brs_region
   resource_group_id         = var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
@@ -108,7 +108,7 @@ module "dsc_sg_rule" {
   count = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
 
   source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.8.9"
+  version                      = "v2.9.0"
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
