@@ -812,14 +812,14 @@ variable "policies" {
   validation {
     condition = alltrue([
       for p in var.policies : (
-        p.primary_backup_target_details == null || p.primary_backup_target_details.tier_settings == null ? true : alltrue([
+        p.primary_backup_target_details == null ? true : (p.primary_backup_target_details.tier_settings == null ? true : alltrue([
           for ts in p.primary_backup_target_details.tier_settings : (
             (ts.cloud_platform == "AWS" ? ts.aws_tiering != null : true) &&
             (ts.cloud_platform == "Azure" ? ts.azure_tiering != null : true) &&
             (ts.cloud_platform == "Oracle" ? ts.oracle_tiering != null : true) &&
             (ts.cloud_platform == "Google" ? ts.google_tiering != null : true)
           )
-        ])
+        ]))
       )
     ])
     error_message = "The tiering configuration block must match the selected cloud_platform (e.g., provide 'aws_tiering' for 'AWS')."
