@@ -416,7 +416,7 @@ resource "terraform_data" "wait_for_source_refresh" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/wait_for_source_refresh.sh '${local.brs_tenant_id}' '${local.brs_instance_guid}' '${local.brs_instance_region}' '${var.brs_endpoint_type}'"
+    command = "${path.module}/scripts/wait_for_source_refresh.sh '${local.brs_tenant_id}' '${local.brs_instance_guid}' '${local.brs_instance_region}' '${var.brs_endpoint_type}' 40 '${local.binaries_path}'"
   }
 }
 
