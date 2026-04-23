@@ -37,6 +37,28 @@ locals {
 
   # Get resolved policy IDs from the BRS module
   resolved_policy_ids = module.backup_recovery_instance.resolved_policy_ids
+
+  binaries_path = "/tmp"
+}
+
+resource "terraform_data" "install_dependencies" {
+  depends_on = [
+    terraform_data.cleanup_brs_agent_resources
+  ]
+  count = var.install_required_binaries ? 1 : 0
+  input = {
+    binaries_path = local.binaries_path
+  }
+  provisioner "local-exec" {
+    command     = "${path.module}/scripts/install-binaries.sh ${self.input.binaries_path}"
+    interpreter = ["/bin/bash", "-c"]
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    command     = "${path.module}/scripts/install-binaries.sh ${self.input.binaries_path}"
+    interpreter = ["/bin/bash", "-c"]
+  }
 }
 
 ##############################################################################
@@ -366,16 +388,16 @@ resource "terraform_data" "wait_before_helm_destroy" {
 
   triggers_replace = {
     helm_release_id = helm_release.data_source_connector.id
-    kube_host       = data.ibm_container_cluster_config.cluster_config.host
-    kube_ca         = data.ibm_container_cluster_config.cluster_config.ca_certificate
-    kube_cert       = data.ibm_container_cluster_config.cluster_config.admin_certificate
-    kube_key        = data.ibm_container_cluster_config.cluster_config.admin_key
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
     dsc_namespace   = var.dsc_namespace
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "${path.module}/scripts/wait_for_namespace_cleanup.sh '${self.triggers_replace.kube_host}' '${self.triggers_replace.kube_ca}' '${self.triggers_replace.kube_cert}' '${self.triggers_replace.kube_key}' '${self.triggers_replace.dsc_namespace}'"
+    command = "${path.module}/scripts/wait_for_namespace_cleanup.sh '${self.triggers_replace.dsc_namespace}'"
+    environment = {
+      KUBECONFIG = self.triggers_replace.kubeconfig_path
+    }
   }
 }
 
@@ -384,7 +406,8 @@ resource "terraform_data" "wait_before_helm_destroy" {
 resource "terraform_data" "wait_for_source_refresh" {
   depends_on = [
     ibm_backup_recovery_source_registration.source_registration,
-    helm_release.data_source_connector
+    helm_release.data_source_connector,
+    terraform_data.install_dependencies
   ]
 
   triggers_replace = {
@@ -779,7 +802,8 @@ resource "ibm_resource_tag" "cluster_brs_tag" {
 # group that is not currently deletable via terraform. This resource uses a
 # local-exec provisioner to call a script that deletes the protection group.
 resource "terraform_data" "delete_auto_protect_pg" {
-  count = var.enable_auto_protect ? 1 : 0
+  depends_on = [terraform_data.install_dependencies]
+  count      = var.enable_auto_protect ? 1 : 0
 
   input = {
     url                 = local.backup_recovery_instance_url
@@ -855,16 +879,17 @@ resource "ibm_backup_recovery" "recover_snapshot" {
 # at destroy time without dependency on kubeconfig files (required for Schematics).
 resource "terraform_data" "cleanup_brs_agent_resources" {
   triggers_replace = {
-    cluster_id = var.cluster_id
-    kube_host  = data.ibm_container_cluster_config.cluster_config.host
-    kube_ca    = data.ibm_container_cluster_config.cluster_config.ca_certificate
-    kube_cert  = data.ibm_container_cluster_config.cluster_config.admin_certificate
-    kube_key   = data.ibm_container_cluster_config.cluster_config.admin_key
+    cluster_id      = var.cluster_id
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    binaries_path   = local.binaries_path
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "${path.module}/scripts/cleanup_brs_agent_resources_schematics.sh '${self.triggers_replace.kube_host}' '${self.triggers_replace.kube_ca}' '${self.triggers_replace.kube_cert}' '${self.triggers_replace.kube_key}'"
+    command = "${path.module}/scripts/cleanup_brs_agent_resources.sh ${self.triggers_replace.binaries_path}"
+    environment = {
+      KUBECONFIG = self.triggers_replace.kubeconfig_path
+    }
   }
 
   depends_on = [

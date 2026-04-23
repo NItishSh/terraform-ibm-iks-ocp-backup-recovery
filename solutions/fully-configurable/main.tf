@@ -1,16 +1,9 @@
 # Retrieve information about an existing VPC cluster
-# Wait for cluster to be ready before downloading config
-resource "terraform_data" "wait_for_cluster_ready" {
-  triggers_replace = {
-    cluster_id     = var.cluster_id
-    endpoint_type  = var.cluster_config_endpoint_type
-    resource_group = var.cluster_resource_group_id
-  }
-
-  provisioner "local-exec" {
-    command     = "${path.module}/../../scripts/wait_for_cluster_ready.sh '${var.cluster_id}' '${var.cluster_resource_group_id}'"
-    interpreter = ["/bin/bash", "-c"]
-  }
+data "ibm_container_vpc_cluster" "vpc_cluster" {
+  name              = var.cluster_id
+  resource_group_id = var.cluster_resource_group_id
+  wait_till         = var.wait_till
+  wait_till_timeout = var.wait_till_timeout
 }
 
 data "ibm_container_cluster_config" "cluster_config" {
@@ -20,7 +13,11 @@ data "ibm_container_cluster_config" "cluster_config" {
   endpoint_type     = var.cluster_config_endpoint_type != "default" ? var.cluster_config_endpoint_type : null
   admin             = true
 
-  depends_on = [terraform_data.wait_for_cluster_ready]
+  # Wait for cluster to be ready before fetching config
+  # This prevents timeouts when cluster is still provisioning
+  depends_on = [
+    data.ibm_container_vpc_cluster.vpc_cluster
+  ]
 }
 
 module "existing_brs_crn_parser" {

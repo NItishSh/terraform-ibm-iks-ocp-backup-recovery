@@ -5,19 +5,11 @@ set -e
 # Script to wait for BRS-managed namespaces to be cleaned up during destroy
 # This replaces the time_sleep resource with active polling of namespace status
 
-KUBE_HOST="$1"
-KUBE_CA="$2"
-KUBE_CERT="$3"
-KUBE_KEY="$4"
-DSC_NAMESPACE="${5:-cohesity-dataprotect}"
-MAX_ATTEMPTS="${6:-20}"  # Default 20 attempts = ~10 minutes with 30s sleep
+DSC_NAMESPACE="${1:-cohesity-dataprotect}"
+MAX_ATTEMPTS="${2:-20}"  # Default 20 attempts = ~10 minutes with 30s sleep
+# The binaries downloaded by the install-binaries script are located in the /tmp directory.
+export PATH=$PATH:${3:-"/tmp"}
 SLEEP_DURATION=30
-
-if [ -z "$KUBE_HOST" ] || [ -z "$KUBE_CA" ] || [ -z "$KUBE_CERT" ] || [ -z "$KUBE_KEY" ]; then
-    echo "Error: Kubernetes credentials are required"
-    echo "Usage: $0 <kube_host> <kube_ca> <kube_cert> <kube_key> [dsc_namespace] [max_attempts]"
-    exit 1
-fi
 
 echo "Waiting for BRS-managed namespaces to be cleaned up..."
 echo "DSC Namespace: $DSC_NAMESPACE"

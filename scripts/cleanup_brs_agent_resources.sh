@@ -23,17 +23,8 @@
 
 set -e
 
-KUBE_HOST="${1:-}"
-KUBE_CA="${2:-}"
-KUBE_CERT="${3:-}"
-KUBE_KEY="${4:-}"
-
-if [ -z "$KUBE_HOST" ] || [ -z "$KUBE_CERT" ] || [ -z "$KUBE_KEY" ]; then
-  echo "Error: Host, client certificate, and client key are required."
-  echo "Usage: $0 <host> <ca_cert> <client_cert> <client_key>"
-  echo "Note: ca_cert can be empty for clusters that don't require it"
-  exit 1
-fi
+# The binaries downloaded by the install-binaries script are located in the /tmp directory.
+export PATH=$PATH:${1:-"/tmp"}
 
 echo "Cleaning up BRS-agent-created namespaces and cluster role bindings..."
 
@@ -42,32 +33,6 @@ if ! command -v kubectl >/dev/null 2>&1; then
   echo "kubectl not found; skipping BRS-agent cleanup."
   exit 0
 fi
-
-# Build a temporary directory for credentials
-TMPDIR=$(mktemp -d /tmp/brs-cleanup-XXXXXX)
-trap 'rm -rf "$TMPDIR"' EXIT
-
-# Only create CA file if CA certificate is provided
-if [ -n "$KUBE_CA" ]; then
-  printf '%s\n' "$KUBE_CA" > "$TMPDIR/ca.pem"
-  CA_ARG="--certificate-authority=$TMPDIR/ca.pem"
-else
-  # Use insecure-skip-tls-verify if no CA certificate provided
-  CA_ARG="--insecure-skip-tls-verify=true"
-fi
-
-printf '%s\n' "$KUBE_CERT" > "$TMPDIR/client.crt"
-printf '%s\n' "$KUBE_KEY" > "$TMPDIR/client.key"
-
-# Helper function to run kubectl with stored credentials
-kctl() {
-  kubectl \
-    --server="$KUBE_HOST" \
-    "$CA_ARG" \
-    --client-certificate="$TMPDIR/client.crt" \
-    --client-key="$TMPDIR/client.key" \
-    "$@"
-}
 
 # Check cluster connectivity
 if ! kctl version --request-timeout=15s >/dev/null 2>&1; then

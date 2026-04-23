@@ -10,6 +10,8 @@ INSTANCE_GUID="$2"
 REGION="$3"
 ENDPOINT_TYPE="$4"
 MAX_ATTEMPTS="${5:-20}"  # Default 20 attempts = ~10 minutes with 30s sleep
+# The binaries downloaded by the install-binaries script are located in the /tmp directory.
+export PATH=$PATH:${6:-"/tmp"}
 SLEEP_DURATION=30
 
 if [ -z "$TENANT_ID" ] || [ -z "$INSTANCE_GUID" ] || [ -z "$REGION" ]; then
