@@ -157,7 +157,7 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
 		{Name: "policies", Value: []map[string]interface{}{
 			{
-				"name":              fmt.Sprintf("%s-policy", prefix),
+				"name":              fmt.Sprintf("%s-test-policy", prefix),
 				"create_new_policy": true,
 				"schedule": map[string]interface{}{
 					"unit": "Hours",
