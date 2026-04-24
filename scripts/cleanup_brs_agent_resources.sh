@@ -35,26 +35,26 @@ if ! command -v kubectl >/dev/null 2>&1; then
 fi
 
 # Check cluster connectivity
-if ! kctl version --request-timeout=15s >/dev/null 2>&1; then
+if ! kubectl version --request-timeout=15s >/dev/null 2>&1; then
   echo "kubectl cannot reach the target cluster; skipping BRS-agent cleanup."
   exit 0
 fi
 
 # Delete namespaces by runtime-generated naming pattern
 echo "Deleting BRS-agent namespaces..."
-kctl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
+kubectl get namespace --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r ns; do
   if [ -n "$ns" ]; then
     echo "  Deleting namespace: $ns"
-    kctl delete namespace "$ns" --ignore-not-found=true || true
+    kubectl delete namespace "$ns" --ignore-not-found=true || true
   fi
 done
 
 # Delete ClusterRoleBindings by runtime-generated naming pattern
 echo "Deleting BRS-agent ClusterRoleBindings..."
-kctl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
+kubectl get clusterrolebinding --no-headers | awk '{print $1}' | grep -E '^brs-backup-agent-' | while read -r crb; do
   if [ -n "$crb" ]; then
     echo "  Deleting ClusterRoleBinding: $crb"
-    kctl delete clusterrolebinding "$crb" --ignore-not-found=true || true
+    kubectl delete clusterrolebinding "$crb" --ignore-not-found=true || true
   fi
 done
 

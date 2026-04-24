@@ -42,9 +42,6 @@ locals {
 }
 
 resource "terraform_data" "install_dependencies" {
-  depends_on = [
-    terraform_data.cleanup_brs_agent_resources
-  ]
   count = var.install_required_binaries ? 1 : 0
   input = {
     binaries_path = local.binaries_path
