@@ -208,7 +208,7 @@ resource "helm_release" "data_source_connector" {
   create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
-  atomic           = true
+  atomic           = var.rollback_on_failure
 
   values = [
     yamlencode({
