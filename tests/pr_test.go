@@ -151,7 +151,6 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
-		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
 		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
 		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
@@ -200,6 +199,12 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 	options.IgnoreUpdates = testhelper.Exemptions{
 		List: []string{
 			"module.protect_cluster.kubernetes_namespace_v1.dsc_namespace",
+		},
+	}
+	options.IgnoreDestroys = testhelper.Exemptions{
+		List: []string{
+			"module.protect_cluster.terraform_data.cleanup_brs_agent_resources",
+			"module.protect_cluster.terraform_data.wait_before_helm_destroy",
 		},
 	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
