@@ -50,6 +50,7 @@ module "protect_cluster" {
   connection_env_type       = var.connection_env_type
   # --- Backup Policy ---
   auto_protect_policy_name = var.auto_protect_policy_name
+  protection_groups        = var.protection_groups
   wait_till                = var.wait_till
   wait_till_timeout        = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---

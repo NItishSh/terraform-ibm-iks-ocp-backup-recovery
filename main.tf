@@ -399,8 +399,6 @@ resource "terraform_data" "wait_before_helm_destroy" {
 }
 
 # Wait for BRS asynchronous discovery to stabilize before reading protection sources.
-# A fixed delay is more reliable here than a custom polling script because the UI
-# refresh behavior is not exposed through a verified CLI/API operation.
 resource "time_sleep" "wait_for_source_discovery" {
   depends_on = [
     ibm_backup_recovery_source_registration.source_registration,
@@ -890,6 +888,7 @@ resource "terraform_data" "cleanup_brs_agent_resources" {
 
   depends_on = [
     ibm_backup_recovery_source_registration.source_registration,
-    helm_release.data_source_connector
+    helm_release.data_source_connector,
+    kubernetes_cluster_role_binding_v1.brsagent_admin
   ]
 }

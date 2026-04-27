@@ -255,6 +255,11 @@ variable "auto_protect_policy_name" {
   description = "Name of an existing protection policy to use for auto-protect. Required when `enable_auto_protect` is `true`. The policy must already exist in the BRS instance (create it using the `terraform-ibm-backup-recovery` module)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.enable_auto_protect == false || (var.enable_auto_protect == true && var.auto_protect_policy_name != null)
+    error_message = "auto_protect_policy_name is required when enable_auto_protect is true."
+  }
 }
 
 variable "enable_auto_protect" {
@@ -268,12 +273,7 @@ variable "enable_auto_protect" {
 ##############################################################################
 
 variable "protection_groups" {
-  description = <<-EOT
-  List of protection groups for granular backup control. Each group selects
-  specific namespaces/objects and applies a policy. Use this as an alternative
-  to `enable_auto_protect` for fine-grained control over which workloads are
-  backed up.
-  EOT
+  description = "List of protection groups for granular backup control. Each group selects specific namespaces/objects and applies a policy. Use this as an alternative to `enable_auto_protect` for fine-grained control over which workloads are backed up."
   type = list(object({
     name        = string
     policy_name = string
@@ -455,7 +455,7 @@ variable "protection_groups" {
     abort_in_blackouts = optional(bool, false)
     pause_in_blackouts = optional(bool, false)
   }))
-  default = []
+  default = null
 }
 
 ##############################################################################
@@ -849,29 +849,7 @@ variable "policies" {
 ##############################################################################
 
 variable "recoveries" {
-  description = <<-EOT
-  List of recovery operations to restore backups created by protection groups.
-  Supports multiple environments: Kubernetes, VMware, Physical, AWS, Azure, GCP, SQL, Oracle, and more.
-
-  This variable follows the official IBM Backup Recovery provider schema and can be used
-  across different backup scenarios. For IKS/ROKS recovery, use kubernetes_params.
-
-  Example for Kubernetes recovery:
-  recoveries = [{
-    name                 = "restore-production-namespace"
-    snapshot_environment = "kKubernetes"
-    kubernetes_params = {
-      recovery_action = "RecoverNamespaces"
-      objects = [{
-        snapshot_id         = "snapshot-123"
-        protection_group_id = "pg-456"
-      }]
-    }
-  }]
-
-  Note: The current provider version supports basic recovery operations. Advanced features
-  like namespace_mapping, volume_info_vec, and cross-cluster recovery may require provider updates.
-  EOT
+  description = "List of recovery operations to restore backups created by protection groups. Supports multiple environments: Kubernetes, VMware, Physical, AWS, Azure, GCP, SQL, Oracle, and more. This variable follows the official IBM Backup Recovery provider schema and can be used across different backup scenarios. For IKS/ROKS recovery, use kubernetes_params. See the Usage section in the README for examples."
   type = list(object({
     name                 = string
     snapshot_environment = string # kKubernetes, kVMware, kPhysical, kAWS, kAzure, kGCP, kSQL, kOracle, kView, etc.

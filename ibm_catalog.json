@@ -321,6 +321,20 @@
               "display_name": "Auto-Protect Policy Name"
             },
             {
+              "key": "protection_groups",
+              "display_name": "Protection Groups",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
               "key": "dsc_helm_timeout",
               "display_name": "Helm Timeout (Seconds)"
             },

@@ -77,6 +77,193 @@ variable "enable_auto_protect" {
   default     = true
   nullable    = false
 }
+variable "protection_groups" {
+  description = "List of protection groups for granular backup control. Each group selects specific namespaces/objects and applies a policy. Use this as an alternative to `enable_auto_protect` for fine-grained control over which workloads are backed up."
+  type = list(object({
+    name        = string
+    policy_name = string
+    description = optional(string)
+
+    # --- Kubernetes-specific params ---
+    enable_indexing       = optional(bool, true)
+    leverage_csi_snapshot = optional(bool, false)
+    non_snapshot_backup   = optional(bool, false)
+    volume_backup_failure = optional(bool, false)
+
+    # Objects (namespaces) to protect
+    objects = optional(list(object({
+      id                          = optional(number)
+      name                        = optional(string)
+      backup_only_pvc             = optional(bool, false)
+      fail_backup_on_hook_failure = optional(bool, false)
+      included_resources          = optional(list(string))
+      excluded_resources          = optional(list(string))
+      include_pvcs = optional(list(object({
+        id   = optional(number)
+        name = optional(string)
+      })))
+      exclude_pvcs = optional(list(object({
+        id   = optional(number)
+        name = optional(string)
+      })))
+
+      # Per-object label-based PV/PVC inclusion
+      include_params = optional(object({
+        label_combination_method = optional(string, "AND") # AND, OR
+        label_vector = optional(list(object({
+          key   = string
+          value = string
+        })))
+        objects = optional(list(object({}))) # usually any or map but provider says array of objects
+        selected_resources = optional(list(object({
+          api_group         = optional(string)
+          is_cluster_scoped = optional(bool)
+          kind              = optional(string)
+          name              = optional(string)
+          version           = optional(string)
+          resource_list = optional(list(object({
+            entity_id = optional(number)
+            name      = optional(string)
+          })))
+        })))
+      }))
+
+      # Per-object label-based PV/PVC exclusion
+      exclude_params = optional(object({
+        label_combination_method = optional(string, "AND")
+        label_vector = optional(list(object({
+          key   = string
+          value = string
+        })))
+        objects = optional(list(object({})))
+        selected_resources = optional(list(object({
+          api_group         = optional(string)
+          is_cluster_scoped = optional(bool)
+          kind              = optional(string)
+          name              = optional(string)
+          version           = optional(string)
+          resource_list = optional(list(object({
+            entity_id = optional(number)
+            name      = optional(string)
+          })))
+        })))
+      }))
+
+      # Quiescing rules for app-consistent backups
+      quiesce_groups = optional(list(object({
+        quiesce_mode = string # kQuiesceTogether, kQuiesceIndependently
+        quiesce_rules = list(object({
+          pod_selector_labels = optional(list(object({
+            key   = string
+            value = string
+          })))
+          pre_snapshot_hooks = list(object({
+            commands      = list(string)
+            container     = optional(string)
+            fail_on_error = optional(bool, false)
+            timeout       = optional(number)
+          }))
+          post_snapshot_hooks = list(object({
+            commands      = list(string)
+            container     = optional(string)
+            fail_on_error = optional(bool, false)
+            timeout       = optional(number)
+          }))
+        }))
+      })))
+    })))
+
+    # Object IDs to exclude
+    exclude_object_ids = optional(list(number))
+
+    # Label-based namespace selection (2D array of label IDs)
+    label_ids         = optional(list(number))
+    exclude_label_ids = optional(list(number))
+
+    # Global label-based inclusion filter
+    include_params = optional(object({
+      label_combination_method = optional(string, "AND") # AND, OR
+      label_vector = optional(list(object({
+        key   = string
+        value = string
+      })))
+      objects = optional(list(object({})))
+      selected_resources = optional(list(object({
+        api_group         = optional(string)
+        is_cluster_scoped = optional(bool)
+        kind              = optional(string)
+        name              = optional(string)
+        version           = optional(string)
+        resource_list = optional(list(object({
+          entity_id = optional(number)
+          name      = optional(string)
+        })))
+      })))
+    }))
+
+    # Global label-based exclusion filter
+    exclude_params = optional(object({
+      label_combination_method = optional(string, "AND")
+      label_vector = optional(list(object({
+        key   = string
+        value = string
+      })))
+      objects = optional(list(object({})))
+      selected_resources = optional(list(object({
+        api_group         = optional(string)
+        is_cluster_scoped = optional(bool)
+        kind              = optional(string)
+        name              = optional(string)
+        version           = optional(string)
+        resource_list = optional(list(object({
+          entity_id = optional(number)
+          name      = optional(string)
+        })))
+      })))
+    }))
+
+    # --- Alert policy ---
+    alert_policy = optional(object({
+      backup_run_status = list(string) # kFailure, kSuccess, kSlaViolation, kWarning
+      alert_targets = optional(list(object({
+        email_address  = string
+        language       = optional(string, "en-us")
+        recipient_type = optional(string, "kTo")
+      })))
+      raise_object_level_failure_alert                    = optional(bool)
+      raise_object_level_failure_alert_after_each_attempt = optional(bool)
+      raise_object_level_failure_alert_after_last_attempt = optional(bool)
+    }))
+
+    # --- SLA ---
+    sla = optional(list(object({
+      backup_run_type = optional(string, "kIncremental") # kIncremental, kFull, kLog
+      sla_minutes     = number
+    })))
+
+    # --- Scheduling ---
+    start_time = optional(object({
+      hour      = number
+      minute    = number
+      time_zone = optional(string, "America/Los_Angeles")
+    }))
+
+    # --- Advanced configs (key/value pairs) ---
+    advanced_configs = optional(list(object({
+      key   = string
+      value = string
+    })))
+
+    priority           = optional(string, "kMedium") # kLow, kMedium, kHigh
+    qos_policy         = optional(string)            # kBackupHDD, kBackupSSD, etc.
+    is_paused          = optional(bool, false)
+    abort_in_blackouts = optional(bool, false)
+    pause_in_blackouts = optional(bool, false)
+  }))
+  default  = null
+  nullable = true
+}
+
 
 variable "dsc_namespace" {
   description = "The namespace in the cluster where the Data Source Connector will be deployed."
