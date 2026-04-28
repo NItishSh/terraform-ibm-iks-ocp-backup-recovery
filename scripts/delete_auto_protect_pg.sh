@@ -12,6 +12,8 @@ TENANT=$2
 ENDPOINT_TYPE=$3
 PROTECTION_GROUP_ID=${4:-}
 REGISTRATION_ID=${5:-}
+# The binaries downloaded by the install-binaries script are located in the /tmp directory.
+export PATH=$PATH:${6:-"/tmp"}
 
 # --- Internal Functions ---
 

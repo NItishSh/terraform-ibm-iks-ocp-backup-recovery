@@ -27,7 +27,33 @@ output "connection_id" {
   value       = local.connection_id
 }
 
-output "protection_policy_id" {
-  description = "ID of the protection policy (null if using an existing policy)"
-  value       = local.use_existing_policy ? null : ibm_backup_recovery_protection_policy.protection_policy[0].id
+output "protection_group_ids" {
+  description = "Map of protection group names to their IDs"
+  value       = { for k, v in ibm_backup_recovery_protection_group.protection_group : k => v.id }
+}
+
+output "protection_sources" {
+  description = "List of protection sources"
+  value       = data.ibm_backup_recovery_protection_sources.sources
+}
+
+output "recovery_ids" {
+  description = "Map of recovery operation names to their IDs"
+  value       = { for k, v in ibm_backup_recovery.recover_snapshot : k => v.id }
+}
+
+output "recovery_status" {
+  description = "Map of recovery operation names to their status information"
+  value = {
+    for k, v in ibm_backup_recovery.recover_snapshot : k => {
+      id     = v.id
+      status = v.status
+      name   = v.name
+    }
+  }
+}
+
+output "brs_tags" {
+  description = "BRS tags that should be added to the cluster to prevent tag drift. Include these in your cluster's tags input."
+  value       = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]
 }

@@ -127,6 +127,10 @@ resource "ibm_container_cluster" "classic_cluster" {
     delete = "2h"
     create = "3h"
   }
+
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 data "ibm_container_vpc_cluster" "vpc_cluster_data" {
@@ -185,18 +189,26 @@ module "backup_recover_protect_ocp" {
   connection_env_type       = var.classic_cluster ? "kRoksClassic" : "kRoksVpc"
   dsc_storage_class         = var.dsc_storage_class == null ? (var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier") : var.dsc_storage_class
   # --- Backup Policy ---
-  policy = {
-    name = "${var.prefix}-retention"
-    schedule = {
-      unit      = "Minutes"
-      frequency = 30
+  auto_protect_policy_name = "${var.prefix}-retention"
+  access_tags              = var.access_tags
+  resource_tags            = var.resource_tags
+  # Policies are now created in the BRS module
+  policies = [
+    {
+      name              = "${var.prefix}-retention"
+      create_new_policy = true
+      schedule = {
+        unit = "Days"
+        day_schedule = {
+          frequency = 1
+        }
+      }
+      retention = {
+        unit     = "Days"
+        duration = 30
+      }
     }
-    retention = {
-      duration = 1
-      unit     = "Days"
-    }
-    use_default_backup_target = true
-  }
-  access_tags   = var.access_tags
-  resource_tags = var.resource_tags
+  ]
+  # Disable automatic tag addition to prevent drift with ocp_base module
+  add_cluster_tags = false
 }

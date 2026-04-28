@@ -151,28 +151,31 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
-		{Name: "brs_instance_name", Value: terraform.Output(t, existingTerraformOptions, "brs_instance_name"), DataType: "string"},
 		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
 		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
-		{Name: "policy", Value: map[string]interface{}{
-			"name": fmt.Sprintf("%s-policy", prefix),
-			"schedule": map[string]interface{}{
-				"unit":      "Hours",
-				"frequency": 6,
+		{Name: "policies", Value: []map[string]interface{}{
+			{
+				"name":              fmt.Sprintf("%s-test-policy", prefix),
+				"create_new_policy": true,
+				"schedule": map[string]interface{}{
+					"unit": "Hours",
+					"hour_schedule": map[string]interface{}{
+						"frequency": 6,
+					},
+				},
+				"retention": map[string]interface{}{
+					"duration": 4,
+					"unit":     "Weeks",
+				},
+				"use_default_backup_target": true,
 			},
-			"retention": map[string]interface{}{
-				"duration": 4,
-				"unit":     "Weeks",
-			},
-			"use_default_backup_target": true,
-		}, DataType: "object"},
+		}, DataType: "list"},
 	}
 }
 
 func TestRunFullyConfigurableInSchematics(t *testing.T) {
-
-	t.Skip("Skipping the DA tests for now since we are mostly focused on modules anyways renovate does update the DAs so we can revisit later")
+	t.Parallel()
 
 	tarIncludePatterns, recurseErr := getTarIncludePatternsRecursively("..", excludeDirs, includeFiletypes)
 	// if error producing tar patterns (very unexpected) fail test immediately
@@ -198,13 +201,18 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 			"module.protect_cluster.kubernetes_namespace_v1.dsc_namespace",
 		},
 	}
+	options.IgnoreDestroys = testhelper.Exemptions{
+		List: []string{
+			"module.protect_cluster.terraform_data.cleanup_brs_agent_resources",
+			"module.protect_cluster.terraform_data.wait_before_helm_destroy",
+		},
+	}
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
 }
 
 // Upgrade Test does not require KMS encryption
 func TestRunUpgradeFullyConfigurable(t *testing.T) {
-
-	t.Skip("Skipping the DA tests for now since we are mostly focused on modules anyways renovate does update the DAs so we can revisit later")
+	t.Parallel()
 
 	tarIncludePatterns, recurseErr := getTarIncludePatternsRecursively("..", excludeDirs, includeFiletypes)
 	// if error producing tar patterns (very unexpected) fail test immediately
@@ -271,6 +279,7 @@ func setupOptions(t *testing.T, prefix string, dir string, exemptionList []strin
 }
 
 func TestRunIKSExample(t *testing.T) {
+	t.Parallel()
 
 	options := setupOptions(t, "brs-iks", iksExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",
@@ -284,6 +293,7 @@ func TestRunIKSExample(t *testing.T) {
 }
 
 func TestRunOCPExample(t *testing.T) {
+	t.Parallel()
 
 	options := setupOptions(t, "brs-ocp", ocpExampleDir, []string{
 		"module.backup_recover_protect_ocp.ibm_backup_recovery_source_registration.source_registration",

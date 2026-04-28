@@ -94,6 +94,10 @@
               "required": true
             },
             {
+              "key": "region",
+              "display_name": "Region"
+            },
+            {
               "key": "provider_visibility",
               "display_name": "Provider Visibility",
               "options": [
@@ -122,6 +126,21 @@
               "required": true
             },
             {
+              "key": "kube_type",
+              "required": true,
+              "display_name": "Cluster Type",
+              "options": [
+                {
+                  "displayname": "Kubernetes",
+                  "value": "kubernetes"
+                },
+                {
+                  "displayname": "OpenShift",
+                  "value": "openshift"
+                }
+              ]
+            },
+            {
               "key": "cluster_resource_group_id",
               "required": true,
               "display_name": "Cluster Resource Group",
@@ -136,6 +155,7 @@
             },
             {
               "key": "cluster_config_endpoint_type",
+              "display_name": "Cluster Config Endpoint Type",
               "options": [
                 {
                   "displayname": "Default",
@@ -182,25 +202,8 @@
               "display_name": "Wait Timeout (Minutes)"
             },
             {
-              "key": "policy",
-              "custom_config": {
-                "type": "code_editor",
-                "grouping": "deployment",
-                "original_grouping": "deployment",
-                "config_constraints": {
-                  "supportedLanguages": [
-                    "hcl"
-                  ]
-                }
-              }
-            },
-            {
               "key": "dsc_chart_uri",
               "display_name": "DSC Helm Chart URI"
-            },
-            {
-              "key": "enable_auto_protect",
-              "display_name": "Enable Auto-Protect"
             },
             {
               "key": "dsc_namespace",
@@ -233,10 +236,6 @@
               ]
             },
             {
-              "key": "brs_connection_name",
-              "display_name": "Backup Recovery Service Connection Name"
-            },
-            {
               "key": "existing_brs_instance_crn",
               "display_name": "Backup Recovery Service Instance",
               "type": "string",
@@ -252,8 +251,8 @@
               }
             },
             {
-              "key": "add_dsc_rules_to_cluster_sg",
-              "display_name": "Add Security Group Rules"
+              "key": "brs_instance_name",
+              "display_name": "Backup Recovery Service Instance Name"
             },
             {
               "key": "brs_endpoint_type",
@@ -270,23 +269,60 @@
               ]
             },
             {
-              "key": "kube_type",
-              "required": true,
-              "display_name": "Cluster Type",
+              "key": "brs_connection_name",
+              "display_name": "Backup Recovery Service Connection Name"
+            },
+            {
+              "key": "brs_create_new_connection",
+              "display_name": "Create New Connection"
+            },
+            {
+              "key": "connection_env_type",
+              "display_name": "Connection Environment Type",
               "options": [
                 {
-                  "displayname": "Kubernetes",
-                  "value": "kubernetes"
+                  "displayname": "IKS VPC",
+                  "value": "kIksVpc"
                 },
                 {
-                  "displayname": "OpenShift",
-                  "value": "openshift"
+                  "displayname": "IKS Classic",
+                  "value": "kIksClassic"
+                },
+                {
+                  "displayname": "ROKS VPC",
+                  "value": "kRoksVpc"
+                },
+                {
+                  "displayname": "ROKS Classic",
+                  "value": "kRoksClassic"
                 }
               ]
             },
             {
-              "key": "registration_images",
-              "display_name": "Registration Images",
+              "key": "policies",
+              "display_name": "Protection Policies",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "enable_auto_protect",
+              "display_name": "Enable Auto-Protect"
+            },
+            {
+              "key": "auto_protect_policy_name",
+              "display_name": "Auto-Protect Policy Name"
+            },
+            {
+              "key": "protection_groups",
+              "display_name": "Protection Groups",
               "custom_config": {
                 "type": "code_editor",
                 "grouping": "deployment",
@@ -311,16 +347,22 @@
               "display_name": "Create Data Source Connector Worker Pool"
             },
             {
-              "key": "brs_create_new_connection",
-              "display_name": "Create New Connection"
+              "key": "add_dsc_rules_to_cluster_sg",
+              "display_name": "Add Security Group Rules"
             },
             {
-              "key": "brs_instance_name",
-              "display_name": "Backup Recovery Service Instance Name"
-            },
-            {
-              "key": "region",
-              "display_name": "Region"
+              "key": "registration_images",
+              "display_name": "Registration Images",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
             },
             {
               "key": "access_tags",
@@ -329,28 +371,6 @@
             {
               "key": "resource_tags",
               "display_name": "Resource Tags"
-            },
-            {
-              "key": "connection_env_type",
-              "display_name": "Connection Environment Type",
-              "options": [
-                {
-                  "displayname": "IKS VPC",
-                  "value": "kIksVpc"
-                },
-                {
-                  "displayname": "IKS Classic",
-                  "value": "kIksClassic"
-                },
-                {
-                  "displayname": "ROKS VPC",
-                  "value": "kRoksVpc"
-                },
-                {
-                  "displayname": "ROKS Classic",
-                  "value": "kRoksClassic"
-                }
-              ]
             }
           ],
           "dependencies": [],

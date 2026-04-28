@@ -1,3 +1,7 @@
+locals {
+  default_version = data.ibm_container_cluster_versions.cluster_versions.default_kube_version
+  cluster_id      = var.cluster_name_id != null ? (var.classic_cluster ? data.ibm_container_cluster.classic_cluster_data[0].id : data.ibm_container_vpc_cluster.vpc_cluster_data[0].id) : (var.classic_cluster ? ibm_container_cluster.classic_cluster[0].id : ibm_container_vpc_cluster.vpc_cluster[0].id)
+}
 ##############################################################################
 # Resource Group
 ##############################################################################
@@ -63,10 +67,6 @@ resource "ibm_network_vlan" "private_vlan" {
 # Lookup the current default kube version for classic cluster
 data "ibm_container_cluster_versions" "cluster_versions" {}
 
-locals {
-  default_version = data.ibm_container_cluster_versions.cluster_versions.default_kube_version
-}
-
 resource "ibm_container_vpc_cluster" "vpc_cluster" {
   count                = var.cluster_name_id == null && !var.classic_cluster ? 1 : 0
   name                 = "${var.prefix}-cluster"
@@ -81,6 +81,9 @@ resource "ibm_container_vpc_cluster" "vpc_cluster" {
   }
   disable_outbound_traffic_protection = true
   tags                                = var.resource_tags
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 resource "ibm_container_cluster" "classic_cluster" {
@@ -117,10 +120,6 @@ data "ibm_container_cluster" "classic_cluster_data" {
   resource_group_id = module.resource_group.resource_group_id
 }
 
-locals {
-  cluster_id = var.cluster_name_id != null ? (var.classic_cluster ? data.ibm_container_cluster.classic_cluster_data[0].id : data.ibm_container_vpc_cluster.vpc_cluster_data[0].id) : (var.classic_cluster ? ibm_container_cluster.classic_cluster[0].id : ibm_container_vpc_cluster.vpc_cluster[0].id)
-}
-
 data "ibm_container_cluster_config" "cluster_config" {
   cluster_name_id   = local.cluster_id
   resource_group_id = module.resource_group.resource_group_id
@@ -133,10 +132,10 @@ resource "time_sleep" "wait_operators" {
   create_duration = "60s"
 }
 
+
 ########################################################################################################################
 # Backup & Recovery for IKS/ROKS with Data Source Connector
 ########################################################################################################################
-
 
 module "backup_recover_protect_iks" {
   source                       = "../.."
@@ -157,18 +156,170 @@ module "backup_recover_protect_iks" {
   connection_env_type       = var.classic_cluster ? "kIksClassic" : "kIksVpc"
   dsc_storage_class         = var.dsc_storage_class == null ? (var.classic_cluster ? "ibmc-block-silver" : "ibmc-vpc-block-metro-5iops-tier") : var.dsc_storage_class
   # --- Backup Policy ---
-  policy = {
-    name = "${var.prefix}-retention"
-    schedule = {
-      unit      = "Minutes"
-      frequency = 30
+  auto_protect_policy_name = "${var.prefix}-retention"
+  access_tags              = var.access_tags
+  resource_tags            = var.resource_tags
+  # Policies are now created in the BRS module
+  policies = [
+    {
+      name              = "${var.prefix}-retention"
+      create_new_policy = true
+      schedule = {
+        unit = "Days"
+        day_schedule = {
+          frequency = 1
+        }
+      }
+      retention = {
+        unit     = "Days"
+        duration = 30
+      }
     }
-    retention = {
-      duration = 1
-      unit     = "Days"
+  ]
+  protection_groups = [
+    {
+      # ========================================
+      # Basic Configuration
+      # ========================================
+      name        = "${var.prefix}-protection-group"
+      policy_name = "${var.prefix}-retention"
+      description = "Comprehensive protection group demonstrating advanced features"
+
+      # ========================================
+      # Priority & QoS
+      # ========================================
+      priority   = "kHigh"      # kLow, kMedium, kHigh
+      qos_policy = "kBackupSSD" # kBackupHDD, kBackupSSD, kBackupAll
+
+      # ========================================
+      # Scheduling & Timing
+      # ========================================
+      start_time = {
+        hour      = 2                  # 2 AM
+        minute    = 30                 # 2:30 AM
+        time_zone = "America/New_York" # EST timezone
+      }
+
+      # ========================================
+      # Pause & Blackout Control
+      # ========================================
+      is_paused = false # Set to true to pause future runs
+      # abort_in_blackouts = false  # Let running backups complete
+      # pause_in_blackouts = true  # Don't start new backups during blackouts
+
+      # ========================================
+      # Kubernetes-Specific Features
+      # ========================================
+      enable_indexing       = true  # Enable search/indexing of backed up data
+      leverage_csi_snapshot = true  # Use CSI snapshots for faster backups
+      non_snapshot_backup   = false # Use snapshot-based backups
+      volume_backup_failure = false # Don't fail entire backup if volume fails
+
+      # ========================================
+      # Objects to Protect
+      # ========================================
+      objects = [
+        {
+          name = kubernetes_namespace_v1.workload_ns.metadata[0].name
+
+          # Backup configuration
+          backup_only_pvc             = false # Backup entire namespace, not just PVCs
+          fail_backup_on_hook_failure = false # Continue backup even if hooks fail
+
+          # Resource filtering
+          included_resources = [
+            "deployments",
+            "statefulsets",
+            "secrets"
+          ]
+
+          # DO NOT include excluded_resources when using included_resources
+
+          # Explicitly set include_params to null to prevent API from returning empty block
+          include_params = null
+        }
+      ]
+
+      # ========================================
+      # Label-Based Filtering (Global)
+      # ========================================
+      include_params = {
+        label_combination_method = "OR" # Include if ANY label matches
+        label_vector = [
+          {
+            key   = "backup-enabled"
+            value = "true"
+          },
+          {
+            key   = "environment"
+            value = "production"
+          }
+        ]
+      }
+
+      exclude_params = {
+        label_combination_method = "AND" # Exclude only if ALL labels match
+        label_vector = [
+          {
+            key   = "backup-exclude"
+            value = "true"
+          }
+        ]
+      }
+
+      # ========================================
+      # Alerts Configuration
+      # ========================================
+      alert_policy = {
+        backup_run_status = [
+          "kFailure",
+          "kSlaViolation",
+          "kWarning"
+        ]
+
+        alert_targets = [
+          {
+            email_address  = "backup-admin@example.com"
+            language       = "en-us"
+            recipient_type = "kTo"
+          },
+          {
+            email_address  = "devops-team@example.com"
+            language       = "en-us"
+            recipient_type = "kCc"
+          }
+        ]
+
+        raise_object_level_failure_alert                    = true
+        raise_object_level_failure_alert_after_last_attempt = true
+        raise_object_level_failure_alert_after_each_attempt = false
+      }
+
+      # ========================================
+      # SLA Configuration
+      # ========================================
+      sla = [
+        {
+          backup_run_type = "kIncremental"
+          sla_minutes     = 60 # 1 hour for incremental backups
+        },
+        {
+          backup_run_type = "kFull"
+          sla_minutes     = 120 # 2 hours for full backups
+        }
+      ]
     }
-    use_default_backup_target = true
-  }
-  access_tags   = var.access_tags
-  resource_tags = var.resource_tags
+  ]
+  # recoveries = [{
+  #   name                 = "restore-production-namespace"
+  #   snapshot_environment = "kKubernetes"
+  #   kubernetes_params = {
+  #     recovery_action = "RecoverNamespaces"
+  #     objects = [{
+  #       snapshot_id         = "snapshot-123"
+  #       protection_group_id = "pg-456"
+  #     }]
+  #   }
+  # }]
+  # ========================================
 }
