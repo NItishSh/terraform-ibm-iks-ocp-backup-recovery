@@ -874,7 +874,7 @@ resource "ibm_backup_recovery" "recover_snapshot" {
 resource "terraform_data" "cleanup_brs_agent_resources" {
   triggers_replace = {
     cluster_id      = var.cluster_id
-    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    kubeconfig_path = var.external_kubeconfig_path != null ? var.external_kubeconfig_path : data.ibm_container_cluster_config.cluster_config.config_file_path
     binaries_path   = local.binaries_path
   }
 
