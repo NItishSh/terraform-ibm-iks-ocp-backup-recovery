@@ -343,6 +343,26 @@
               "display_name": "Helm Timeout (Seconds)"
             },
             {
+              "key": "dsc_image_pull_policy",
+              "display_name": "Image Pull Policy"
+            },
+            {
+              "key": "dsc_resources",
+              "display_name": "Data Source Connector Resources"
+            },
+            {
+              "key": "dsc_readiness_probe",
+              "display_name": "Readiness Probe Configuration"
+            },
+            {
+              "key": "dsc_liveness_probe",
+              "display_name": "Liveness Probe Configuration"
+            },
+            {
+              "key": "dsc_wait_for_jobs",
+              "display_name": "Wait for Jobs"
+            },
+            {
               "key": "dsc_storage_class",
               "display_name": "Data Source Connector Storage Class"
             },

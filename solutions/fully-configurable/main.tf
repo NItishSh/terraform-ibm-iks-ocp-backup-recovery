@@ -61,6 +61,11 @@ module "protect_cluster" {
   dsc_replicas           = var.dsc_replicas
   dsc_namespace          = var.dsc_namespace
   dsc_helm_timeout       = var.dsc_helm_timeout
+  dsc_image_pull_policy  = var.dsc_image_pull_policy
+  dsc_resources          = var.dsc_resources
+  dsc_readiness_probe    = var.dsc_readiness_probe
+  dsc_liveness_probe     = var.dsc_liveness_probe
+  dsc_wait_for_jobs      = var.dsc_wait_for_jobs
   dsc_storage_class      = var.dsc_storage_class
   create_dsc_worker_pool = var.create_dsc_worker_pool
   rollback_on_failure    = var.rollback_on_failure

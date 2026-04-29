@@ -143,9 +143,118 @@ variable "dsc_replicas" {
 }
 
 variable "dsc_helm_timeout" {
-  description = "Timeout in seconds for the Data Source Connector Helm deployment."
+  description = <<-EOT
+    Timeout in seconds for the Data Source Connector Helm deployment.
+    Increased default to 3600 seconds (60 minutes) to accommodate:
+    - Container image pulls from registry
+    - Storage provisioning and PVC binding
+    - Pod initialization and readiness checks
+    - Resource scheduling in busy clusters
+  EOT
   type        = number
-  default     = 1500
+  default     = 3600
+  nullable    = false
+
+  validation {
+    condition     = var.dsc_helm_timeout >= 600
+    error_message = "Helm timeout must be at least 600 seconds (10 minutes) to allow sufficient time for deployment."
+  }
+}
+
+variable "dsc_image_pull_policy" {
+  description = "Image pull policy for the Data Source Connector. Use 'IfNotPresent' to cache images and speed up deployments, or 'Always' to ensure latest image is pulled."
+  type        = string
+  default     = "IfNotPresent"
+  nullable    = false
+
+  validation {
+    condition     = contains(["Always", "IfNotPresent", "Never"], var.dsc_image_pull_policy)
+    error_message = "Image pull policy must be one of: Always, IfNotPresent, Never."
+  }
+}
+
+variable "dsc_resources" {
+  description = <<-EOT
+    Resource requests and limits for the Data Source Connector pods.
+    Setting appropriate values helps with scheduling and prevents resource contention.
+    Example:
+    {
+      requests = {
+        cpu    = "500m"
+        memory = "1Gi"
+      }
+      limits = {
+        cpu    = "2000m"
+        memory = "4Gi"
+      }
+    }
+  EOT
+  type = object({
+    requests = optional(object({
+      cpu    = optional(string)
+      memory = optional(string)
+    }))
+    limits = optional(object({
+      cpu    = optional(string)
+      memory = optional(string)
+    }))
+  })
+  default  = null
+  nullable = true
+}
+
+variable "dsc_readiness_probe" {
+  description = <<-EOT
+    Readiness probe configuration for the Data Source Connector.
+    Adjust these values if pods are taking longer to become ready.
+    Example:
+    {
+      initialDelaySeconds = 30
+      periodSeconds       = 10
+      timeoutSeconds      = 5
+      successThreshold    = 1
+      failureThreshold    = 3
+    }
+  EOT
+  type = object({
+    initialDelaySeconds = optional(number)
+    periodSeconds       = optional(number)
+    timeoutSeconds      = optional(number)
+    successThreshold    = optional(number)
+    failureThreshold    = optional(number)
+  })
+  default  = null
+  nullable = true
+}
+
+variable "dsc_liveness_probe" {
+  description = <<-EOT
+    Liveness probe configuration for the Data Source Connector.
+    Adjust these values if pods are being restarted unnecessarily.
+    Example:
+    {
+      initialDelaySeconds = 60
+      periodSeconds       = 20
+      timeoutSeconds      = 5
+      successThreshold    = 1
+      failureThreshold    = 3
+    }
+  EOT
+  type = object({
+    initialDelaySeconds = optional(number)
+    periodSeconds       = optional(number)
+    timeoutSeconds      = optional(number)
+    successThreshold    = optional(number)
+    failureThreshold    = optional(number)
+  })
+  default  = null
+  nullable = true
+}
+
+variable "dsc_wait_for_jobs" {
+  description = "If true, Helm will wait for all Jobs to complete before marking the release as successful. Set to false if init jobs are causing timeouts."
+  type        = bool
+  default     = true
   nullable    = false
 }
 

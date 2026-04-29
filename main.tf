@@ -240,36 +240,43 @@ resource "helm_release" "data_source_connector" {
   create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
+  wait_for_jobs    = var.dsc_wait_for_jobs
   atomic           = var.rollback_on_failure
 
   values = [
-    yamlencode({
-      secrets = {
-        registrationToken = local.registration_token
-      }
-      image = {
-        registry   = element(split("/", var.dsc_image_version), 0)
-        namespace  = element(split("/", var.dsc_image_version), 1)
-        repository = "${element(split("/", var.dsc_image_version), 2)}/${element(split("/", split(":", var.dsc_image_version)[0]), 3)}"
-        tag        = split("@", split(":", var.dsc_image_version)[1])[0]
-      }
-      replicaCount     = var.dsc_replicas
-      fullnameOverride = var.dsc_name
-      nodeSelector = local.is_vpc && var.create_dsc_worker_pool ? {
-        "dedicated" = "data-source-connector"
-      } : {}
-      tolerations = local.is_vpc && var.create_dsc_worker_pool ? [
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "data-source-connector"
-          effect   = "NoSchedule"
+    yamlencode(merge(
+      {
+        secrets = {
+          registrationToken = local.registration_token
         }
-      ] : []
-      volumeClaimTemplate = {
-        storageClass = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
-      }
-    })
+        image = {
+          registry   = element(split("/", var.dsc_image_version), 0)
+          namespace  = element(split("/", var.dsc_image_version), 1)
+          repository = "${element(split("/", var.dsc_image_version), 2)}/${element(split("/", split(":", var.dsc_image_version)[0]), 3)}"
+          tag        = split("@", split(":", var.dsc_image_version)[1])[0]
+          pullPolicy = var.dsc_image_pull_policy
+        }
+        replicaCount     = var.dsc_replicas
+        fullnameOverride = var.dsc_name
+        nodeSelector = local.is_vpc && var.create_dsc_worker_pool ? {
+          "dedicated" = "data-source-connector"
+        } : {}
+        tolerations = local.is_vpc && var.create_dsc_worker_pool ? [
+          {
+            key      = "dedicated"
+            operator = "Equal"
+            value    = "data-source-connector"
+            effect   = "NoSchedule"
+          }
+        ] : []
+        volumeClaimTemplate = {
+          storageClass = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
+        }
+      },
+      var.dsc_resources != null ? { resources = var.dsc_resources } : {},
+      var.dsc_readiness_probe != null ? { readinessProbe = var.dsc_readiness_probe } : {},
+      var.dsc_liveness_probe != null ? { livenessProbe = var.dsc_liveness_probe } : {}
+    ))
   ]
 
   depends_on = [
