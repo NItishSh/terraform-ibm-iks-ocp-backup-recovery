@@ -344,23 +344,36 @@
             },
             {
               "key": "dsc_image_pull_policy",
-              "display_name": "Image Pull Policy"
+              "type": "string",
+              "display_name": "Image Pull Policy",
+              "description": "Image pull policy for the Data Source Connector. Use 'IfNotPresent' to cache images and speed up deployments."
             },
             {
               "key": "dsc_resources",
-              "display_name": "Data Source Connector Resources"
+              "type": "json",
+              "display_name": "Data Source Connector Resources",
+              "description": "Resource requests and limits for the Data Source Connector pods. Leave empty to use chart defaults.",
+              "hidden": true
             },
             {
               "key": "dsc_readiness_probe",
-              "display_name": "Readiness Probe Configuration"
+              "type": "json",
+              "display_name": "Readiness Probe Configuration",
+              "description": "Readiness probe configuration for the Data Source Connector. Leave empty to use chart defaults.",
+              "hidden": true
             },
             {
               "key": "dsc_liveness_probe",
-              "display_name": "Liveness Probe Configuration"
+              "type": "json",
+              "display_name": "Liveness Probe Configuration",
+              "description": "Liveness probe configuration for the Data Source Connector. Leave empty to use chart defaults.",
+              "hidden": true
             },
             {
               "key": "dsc_wait_for_jobs",
-              "display_name": "Wait for Jobs"
+              "type": "boolean",
+              "display_name": "Wait for Jobs",
+              "description": "If true, Helm will wait for all Jobs to complete before marking the release as successful."
             },
             {
               "key": "dsc_storage_class",
