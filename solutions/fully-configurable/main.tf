@@ -63,6 +63,7 @@ module "protect_cluster" {
   dsc_helm_timeout       = var.dsc_helm_timeout
   dsc_storage_class      = var.dsc_storage_class
   create_dsc_worker_pool = var.create_dsc_worker_pool
+  rollback_on_failure    = var.rollback_on_failure
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect

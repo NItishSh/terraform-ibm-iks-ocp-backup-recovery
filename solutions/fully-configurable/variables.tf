@@ -326,6 +326,11 @@ variable "dsc_registry" {
   default     = "icr.io"
   nullable    = false
 }
+variable "rollback_on_failure" {
+  description = "Flag to automatically rollback the helm chart on installation failure."
+  type        = bool
+  default     = true
+}
 variable "brs_connection_name" {
   type        = string
   description = "Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster. If `brs_create_new_connection` is set to `true` (default), this will be the name of the new connection created. If set to `false`, this must be the name of an existing connection."
