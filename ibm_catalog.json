@@ -351,6 +351,26 @@
               "display_name": "Create Data Source Connector Worker Pool"
             },
             {
+              "key": "dsc_worker_pool_flavor",
+              "display_name": "Data Source Connector Worker Pool Flavor"
+            },
+            {
+              "key": "dsc_pod_cpu_limits",
+              "display_name": "Data Source Connector Pod CPU Limits"
+            },
+            {
+              "key": "dsc_pod_memory_limits",
+              "display_name": "Data Source Connector Pod Memory Limits"
+            },
+            {
+              "key": "dsc_pod_cpu_requests",
+              "display_name": "Data Source Connector Pod CPU Requests"
+            },
+            {
+              "key": "dsc_pod_memory_requests",
+              "display_name": "Data Source Connector Pod Memory Requests"
+            },
+            {
               "key": "add_dsc_rules_to_cluster_sg",
               "display_name": "Add Security Group Rules"
             },

@@ -54,15 +54,20 @@ module "protect_cluster" {
   wait_till                = var.wait_till
   wait_till_timeout        = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---
-  dsc_chart_uri          = var.dsc_chart_uri
-  dsc_image_version      = var.dsc_image_version
-  dsc_name               = var.dsc_name
-  dsc_replicas           = var.dsc_replicas
-  dsc_namespace          = var.dsc_namespace
-  dsc_helm_timeout       = var.dsc_helm_timeout
-  dsc_storage_class      = var.dsc_storage_class
-  create_dsc_worker_pool = var.create_dsc_worker_pool
-  rollback_on_failure    = var.rollback_on_failure
+  dsc_chart_uri           = var.dsc_chart_uri
+  dsc_image_version       = var.dsc_image_version
+  dsc_name                = var.dsc_name
+  dsc_replicas            = var.dsc_replicas
+  dsc_namespace           = var.dsc_namespace
+  dsc_helm_timeout        = var.dsc_helm_timeout
+  dsc_storage_class       = var.dsc_storage_class
+  create_dsc_worker_pool  = var.create_dsc_worker_pool
+  dsc_worker_pool_flavor  = var.dsc_worker_pool_flavor
+  dsc_pod_cpu_limits      = var.dsc_pod_cpu_limits
+  dsc_pod_memory_limits   = var.dsc_pod_memory_limits
+  dsc_pod_cpu_requests    = var.dsc_pod_cpu_requests
+  dsc_pod_memory_requests = var.dsc_pod_memory_requests
+  rollback_on_failure     = var.rollback_on_failure
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect

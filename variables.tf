@@ -162,6 +162,41 @@ variable "create_dsc_worker_pool" {
   default     = true
 }
 
+variable "dsc_worker_pool_flavor" {
+  description = "The machine flavor for the Data Source Connector worker pool. This determines the CPU, memory, and other resources available to each worker node. Common flavors: bx2.4x16 (4 vCPU, 16GB RAM), bx2.8x32 (8 vCPU, 32GB RAM), bx2.16x64 (16 vCPU, 64GB RAM)."
+  type        = string
+  default     = "bx2.4x16"
+  nullable    = false
+}
+
+variable "dsc_pod_cpu_limits" {
+  description = "CPU limit for each Data Source Connector pod (e.g., '4', '8'). Should match or exceed the worker node's available CPU."
+  type        = string
+  default     = "4"
+  nullable    = false
+}
+
+variable "dsc_pod_memory_limits" {
+  description = "Memory limit for each Data Source Connector pod (e.g., '8Gi', '16Gi'). Should match or exceed the worker node's available memory."
+  type        = string
+  default     = "8Gi"
+  nullable    = false
+}
+
+variable "dsc_pod_cpu_requests" {
+  description = "CPU request for each Data Source Connector pod (e.g., '2', '4'). This is the guaranteed CPU allocation."
+  type        = string
+  default     = "2"
+  nullable    = false
+}
+
+variable "dsc_pod_memory_requests" {
+  description = "Memory request for each Data Source Connector pod (e.g., '5Gi', '10Gi'). This is the guaranteed memory allocation."
+  type        = string
+  default     = "5Gi"
+  nullable    = false
+}
+
 ##############################################################################
 # Backup Recovery Service Instance
 ##############################################################################
