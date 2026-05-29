@@ -2,6 +2,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -120,9 +121,9 @@ func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Op
 		Upgrade: true,
 	})
 
-	terraform.Init(t, existingTerraformOptions)
-	terraform.WorkspaceSelectOrNew(t, existingTerraformOptions, prefix)
-	_, err = terraform.InitAndApplyE(t, existingTerraformOptions)
+	terraform.InitContext(t, context.Background(), existingTerraformOptions)
+	terraform.WorkspaceSelectOrNewContext(t, context.Background(), existingTerraformOptions, prefix)
+	_, err = terraform.InitAndApplyContextE(t, context.Background(), existingTerraformOptions)
 	require.NoError(t, err, "Init and Apply of temp existing resource failed")
 
 	return existingTerraformOptions
@@ -134,24 +135,24 @@ func cleanupTerraform(t *testing.T, options *terraform.Options, prefix string) {
 		return
 	}
 	logger.Log(t, "START: Destroy (existing resources)")
-	terraform.Destroy(t, options)
-	terraform.WorkspaceDelete(t, options, prefix)
+	terraform.DestroyContext(t, context.Background(), options)
+	terraform.WorkspaceDeleteContext(t, context.Background(), options, prefix)
 	logger.Log(t, "END: Destroy (existing resources)")
 }
 
 func getSchematicTerraformVars(t *testing.T, prefix string, options *testschematic.TestSchematicOptions, existingTerraformOptions *terraform.Options) []testschematic.TestSchematicTerraformVar {
 	return []testschematic.TestSchematicTerraformVar{
 		{Name: "ibmcloud_api_key", Value: options.RequiredEnvironmentVars["TF_VAR_ibmcloud_api_key"], DataType: "string", Secure: true},
-		{Name: "cluster_id", Value: terraform.Output(t, existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
-		{Name: "cluster_resource_group_id", Value: terraform.Output(t, existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
+		{Name: "cluster_id", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
+		{Name: "cluster_resource_group_id", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
 		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
 		{Name: "existing_brs_instance_crn", Value: permanentResources["brs_us_east_crn"], DataType: "string"},
-		{Name: "brs_connection_name", Value: terraform.Output(t, existingTerraformOptions, "brs_connection_name"), DataType: "string"},
+		{Name: "brs_connection_name", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "brs_connection_name"), DataType: "string"},
 		{Name: "brs_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
 		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
-		{Name: "region", Value: terraform.Output(t, existingTerraformOptions, "region"), DataType: "string"},
+		{Name: "region", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "region"), DataType: "string"},
 		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
 		{Name: "policies", Value: []map[string]interface{}{
@@ -182,7 +183,7 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 	require.NoError(t, recurseErr, "Schematic Test had unexpected error traversing directory tree")
 
 	// Provision resources first
-	prefix := fmt.Sprintf("ocp-brs-%s", strings.ToLower(random.UniqueId()))
+	prefix := fmt.Sprintf("ocp-brs-%s", strings.ToLower(random.UniqueID()))
 	existingTerraformOptions := setupTerraform(t, prefix, "./resources")
 	defer cleanupTerraform(t, existingTerraformOptions, prefix)
 
@@ -218,7 +219,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 	require.NoError(t, recurseErr, "Schematic Test had unexpected error traversing directory tree")
 
 	// Provision existing resources first
-	prefix := fmt.Sprintf("ocp-existing-%s", strings.ToLower(random.UniqueId()))
+	prefix := fmt.Sprintf("ocp-existing-%s", strings.ToLower(random.UniqueID()))
 	existingTerraformOptions := setupTerraform(t, prefix, "./resources")
 	defer cleanupTerraform(t, existingTerraformOptions, prefix)
 

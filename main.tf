@@ -142,7 +142,7 @@ module "dsc_sg_rule" {
   count = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
 
   source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.9.0"
+  version                      = "v2.9.1"
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
@@ -299,7 +299,7 @@ resource "helm_release" "data_source_connector" {
 resource "kubernetes_service_account_v1" "brsagent" {
   metadata {
     name      = "brsagent"
-    namespace = helm_release.data_source_connector.metadata.namespace
+    namespace = var.dsc_namespace
   }
 
   lifecycle {
@@ -309,6 +309,7 @@ resource "kubernetes_service_account_v1" "brsagent" {
       metadata[0].annotations,
     ]
   }
+  depends_on = [kubernetes_namespace_v1.dsc_namespace]
 }
 
 resource "kubernetes_cluster_role_binding_v1" "brsagent_admin" {
