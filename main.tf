@@ -182,21 +182,24 @@ module "dsc_sg_rule" {
 ##############################################################################
 
 locals {
-  # Create a static map based on zone index (0, 1, 2, etc.)
-  # This allows for_each keys to be known at plan time
-  max_zones = 3 # Support up to 3 zones (common for IBM Cloud VPC)
+  # Get zone information from cluster data source (available at plan time)
+  # This ensures for_each keys are known during planning
+  cluster_zones = local.is_vpc && var.create_dsc_worker_pool ? [
+    for pool in data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools :
+    pool.zones if pool.name == data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[0].name
+  ][0] : []
 
-  # Calculate workers per zone, distributing extras to first zones
-  num_zones     = local.is_vpc && var.create_dsc_worker_pool ? length(data.ibm_container_vpc_worker_pool.pool[0].zones) : 0
+  # Calculate number of zones and workers per zone
+  num_zones     = local.is_vpc && var.create_dsc_worker_pool ? length(local.cluster_zones) : 0
   base_workers  = local.num_zones > 0 ? floor(var.dsc_replicas / local.num_zones) : 0
   extra_workers = local.num_zones > 0 ? var.dsc_replicas % local.num_zones : 0
 
-  # Create static map with zone indices as keys (0, 1, 2)
+  # Create static map with zone names as keys (known at plan time)
   # Only include zones that will have at least 1 worker
   zone_worker_map = local.is_vpc && var.create_dsc_worker_pool ? {
-    for idx in range(local.max_zones) : idx => (
+    for idx, zone in local.cluster_zones : zone.name => (
       idx < local.extra_workers ? local.base_workers + 1 : local.base_workers
-    ) if idx < local.num_zones && (idx < local.extra_workers ? local.base_workers + 1 : local.base_workers) > 0
+    ) if(idx < local.extra_workers ? local.base_workers + 1 : local.base_workers) > 0
   } : {}
 }
 
@@ -204,15 +207,15 @@ resource "ibm_container_vpc_worker_pool" "data_source_connector" {
   for_each = local.zone_worker_map
 
   cluster           = data.ibm_container_vpc_cluster.vpc_cluster[0].id
-  worker_pool_name  = "dsc-pool-zone-${each.key + 1}"
+  worker_pool_name  = "dsc-pool-${replace(each.key, "-", "")}"
   flavor            = var.dsc_worker_pool_flavor
   vpc_id            = data.ibm_container_vpc_worker_pool.pool[0].vpc_id
   worker_count      = each.value
   resource_group_id = var.cluster_resource_group_id
 
   zones {
-    name      = data.ibm_container_vpc_worker_pool.pool[0].zones[each.key].name
-    subnet_id = data.ibm_container_vpc_worker_pool.pool[0].zones[each.key].subnet_id
+    name      = each.key
+    subnet_id = [for z in data.ibm_container_vpc_worker_pool.pool[0].zones : z.subnet_id if z.name == each.key][0]
   }
 
   labels = {
