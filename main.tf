@@ -182,23 +182,28 @@ module "dsc_sg_rule" {
 ##############################################################################
 
 locals {
-  # Calculate worker distribution across zones
-  zones_list    = local.is_vpc && var.create_dsc_worker_pool ? data.ibm_container_vpc_worker_pool.pool[0].zones : []
-  num_zones     = length(local.zones_list)
+  # Create a static map based on zone index (0, 1, 2, etc.)
+  # This allows for_each keys to be known at plan time
+  max_zones = 3 # Support up to 3 zones (common for IBM Cloud VPC)
+
+  # Calculate workers per zone, distributing extras to first zones
+  num_zones     = local.is_vpc && var.create_dsc_worker_pool ? length(data.ibm_container_vpc_worker_pool.pool[0].zones) : 0
   base_workers  = local.num_zones > 0 ? floor(var.dsc_replicas / local.num_zones) : 0
   extra_workers = local.num_zones > 0 ? var.dsc_replicas % local.num_zones : 0
 
-  # Create a map of zone index to worker count
-  # Distribute extra workers to the first N zones
-  zone_worker_map = {
-    for idx, zone in local.zones_list : idx => (
-      idx < local.extra_workers ? local.base_workers + 1 : local.base_workers
-    )
-  }
+  # Create static map with zone indices as keys (0, 1, 2)
+  # Only include indices that have actual zones
+  zone_worker_map = local.is_vpc && var.create_dsc_worker_pool ? {
+    for idx in range(local.max_zones) : idx => (
+      idx < local.num_zones ? (
+        idx < local.extra_workers ? local.base_workers + 1 : local.base_workers
+      ) : 0
+    ) if idx < local.num_zones
+  } : {}
 }
 
 resource "ibm_container_vpc_worker_pool" "data_source_connector" {
-  for_each = local.is_vpc && var.create_dsc_worker_pool ? local.zone_worker_map : {}
+  for_each = local.zone_worker_map
 
   cluster           = data.ibm_container_vpc_cluster.vpc_cluster[0].id
   worker_pool_name  = "dsc-pool-zone-${each.key + 1}"
@@ -208,8 +213,8 @@ resource "ibm_container_vpc_worker_pool" "data_source_connector" {
   resource_group_id = var.cluster_resource_group_id
 
   zones {
-    name      = local.zones_list[each.key].name
-    subnet_id = local.zones_list[each.key].subnet_id
+    name      = data.ibm_container_vpc_worker_pool.pool[0].zones[each.key].name
+    subnet_id = data.ibm_container_vpc_worker_pool.pool[0].zones[each.key].subnet_id
   }
 
   labels = {
