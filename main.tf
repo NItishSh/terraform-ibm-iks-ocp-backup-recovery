@@ -192,13 +192,11 @@ locals {
   extra_workers = local.num_zones > 0 ? var.dsc_replicas % local.num_zones : 0
 
   # Create static map with zone indices as keys (0, 1, 2)
-  # Only include indices that have actual zones
+  # Only include zones that will have at least 1 worker
   zone_worker_map = local.is_vpc && var.create_dsc_worker_pool ? {
     for idx in range(local.max_zones) : idx => (
-      idx < local.num_zones ? (
-        idx < local.extra_workers ? local.base_workers + 1 : local.base_workers
-      ) : 0
-    ) if idx < local.num_zones
+      idx < local.extra_workers ? local.base_workers + 1 : local.base_workers
+    ) if idx < local.num_zones && (idx < local.extra_workers ? local.base_workers + 1 : local.base_workers) > 0
   } : {}
 }
 
