@@ -8,7 +8,7 @@ locals {
   is_classic = length(regexall("Classic$", var.connection_env_type)) > 0
 
   # --- BRS region: cluster region for new instances, existing instance region otherwise ---
-  brs_region = var.existing_brs_instance_crn != null ? module.crn_parser[0].region : var.region
+  brs_region = var.existing_brs_instance_crn != null ? module.crn_parser.region : var.region
 
   # --- Cluster attributes (resolved from VPC or Classic data sources) ---
   cluster_crn                  = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].crn : data.ibm_container_cluster.classic_cluster[0].crn
@@ -59,15 +59,20 @@ resource "terraform_data" "install_dependencies" {
 }
 
 ##############################################################################
+# IAM Auth Token (retrieved from provider credentials)
+##############################################################################
+
+# Retrieves the IAM access token from the IBM Cloud provider configuration.
+data "ibm_iam_auth_token" "iam_token" {}
+
+##############################################################################
 # CRN Parser (for existing BRS instance)
 ##############################################################################
 
 module "crn_parser" {
-  count = var.existing_brs_instance_crn == null ? 0 : 1
-
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
   version = "1.5.0"
-  crn     = var.existing_brs_instance_crn
+  crn     = var.existing_brs_instance_crn != null ? var.existing_brs_instance_crn : ""
 }
 
 ##############################################################################
@@ -428,7 +433,7 @@ resource "time_sleep" "wait_for_source_discovery" {
     dsc_version   = var.dsc_image_version
   }
 
-  create_duration = "5m"
+  create_duration = "10m"
 }
 
 data "ibm_backup_recovery_protection_sources" "sources" {
@@ -792,6 +797,39 @@ resource "ibm_backup_recovery_protection_group" "protection_group" {
 }
 
 ##############################################################################
+# Cancel running backup jobs before protection group deletion
+##############################################################################
+
+# Cancels any active backup run on each protection group during destroy.
+# Must depend on the protection group so Terraform destroys this resource first,
+# running the cancel provisioner before the provider attempts to delete the group.
+resource "terraform_data" "cancel_pg_runs" {
+  for_each = var.recovery_mode == "cross-cluster" ? { for pg in var.protection_groups : pg.name => pg } : {}
+
+  input = {
+    url                 = local.backup_recovery_instance_url
+    tenant              = local.brs_tenant_id
+    endpoint_type       = var.brs_endpoint_type
+    protection_group_id = ibm_backup_recovery_protection_group.protection_group[each.key].id
+  }
+
+  triggers_replace = {
+    api_key = sensitive(var.ibmcloud_api_key)
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    command     = "${path.module}/scripts/cancel_pg_runs.sh 'https://${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.protection_group_id}'"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      API_KEY = self.triggers_replace.api_key
+    }
+  }
+
+  depends_on = [ibm_backup_recovery_protection_group.protection_group]
+}
+
+##############################################################################
 # Tag cluster with BRS instance information
 ##############################################################################
 
@@ -841,11 +879,118 @@ resource "terraform_data" "delete_auto_protect_pg" {
 
 
 ##############################################################################
-# Restore the backups to Same or different cluster
+# Wait for Backup Completion (Single-Shot Execution Critical)
+##############################################################################
+
+# Wait for initial backup to complete before attempting recovery
+# This ensures snapshots are available for the recovery operation
+resource "time_sleep" "wait_for_backup_completion" {
+  count = var.enable_recovery && var.wait_for_backup_completion != "0s" ? 1 : 0
+
+  depends_on = [
+    ibm_backup_recovery_protection_group.protection_group,
+    time_sleep.wait_for_source_discovery
+  ]
+
+  create_duration = var.wait_for_backup_completion
+
+  triggers = {
+    protection_group_ids = join(",", [for pg in ibm_backup_recovery_protection_group.protection_group : pg.id])
+  }
+}
+
+resource "terraform_data" "wait_for_backup_run" {
+  for_each = var.enable_recovery ? { for pg in var.protection_groups : pg.name => pg } : {}
+
+  depends_on = [
+    ibm_backup_recovery_protection_group.protection_group,
+    time_sleep.wait_for_source_discovery,
+    time_sleep.wait_for_backup_completion,
+    terraform_data.install_dependencies
+  ]
+
+  input = {
+    url                   = "https://${local.backup_recovery_instance_url}"
+    tenant                = local.brs_tenant_id
+    endpoint_type         = var.brs_endpoint_type
+    instance_id           = local.brs_instance_guid
+    protection_group_id   = ibm_backup_recovery_protection_group.protection_group[each.key].id
+    api_key               = sensitive(var.ibmcloud_api_key)
+    timeout_minutes       = var.backup_run_poll_timeout_minutes
+    poll_interval_seconds = var.backup_run_poll_interval_seconds
+    binaries_path         = local.binaries_path
+  }
+
+  triggers_replace = {
+    protection_group_id   = ibm_backup_recovery_protection_group.protection_group[each.key].id
+    timeout_minutes       = tostring(var.backup_run_poll_timeout_minutes)
+    poll_interval_seconds = tostring(var.backup_run_poll_interval_seconds)
+  }
+
+  provisioner "local-exec" {
+    command     = "${path.module}/scripts/wait_for_backup_run.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.instance_id}' '${self.input.protection_group_id}' '${self.input.timeout_minutes}' '${self.input.poll_interval_seconds}' '${self.input.binaries_path}'"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      IBMCLOUD_API_KEY = self.input.api_key
+      IAM_TOKEN        = data.ibm_iam_auth_token.iam_token.iam_access_token
+    }
+  }
+}
+
+##############################################################################
+# Query Protection Group Runs (Snapshot Discovery)
+##############################################################################
+
+# Data source to discover completed backup snapshots after polling confirms they exist
+# Extract numeric protection group IDs for API calls
+locals {
+  # Convert full PG ID format (clusterid/::timestamp:id:id) to numeric format (timestamp:id:id)
+  # Example: "5n3kwor5cb/::8009179080677672:1753125047518:126734" -> "8009179080677672:1753125047518:126734"
+  numeric_pg_ids = var.enable_recovery ? {
+    for pg_name, pg_resource in ibm_backup_recovery_protection_group.protection_group :
+    pg_name => split("::", pg_resource.id)[1]
+  } : {}
+}
+
+data "ibm_backup_recovery_protection_group_runs" "backup_runs" {
+  for_each = var.enable_recovery ? { for pg in var.protection_groups : pg.name => pg } : {}
+
+  x_ibm_tenant_id        = local.brs_tenant_id
+  protection_group_id    = local.numeric_pg_ids[each.key]
+  endpoint_type          = var.brs_endpoint_type
+  instance_id            = local.brs_instance_guid
+  region                 = local.brs_instance_region
+  include_object_details = true
+  archival_run_status    = ["Succeeded", "SucceededWithWarning"]
+
+  depends_on = [
+    terraform_data.wait_for_backup_run,
+    ibm_backup_recovery_protection_group.protection_group
+  ]
+}
+
+# Local to extract latest successful snapshot IDs per protection group
+locals {
+  # Map of protection group name to latest successful snapshot
+  latest_snapshots = var.enable_recovery ? {
+    for pg_name, runs in data.ibm_backup_recovery_protection_group_runs.backup_runs : pg_name => (
+      length(try(runs.runs, [])) > 0 ? (
+        try(runs.runs[0].local_backup_info[0].snapshot_info[0].snapshot_id, try(runs.runs[0].id, null))
+      ) : null
+    )
+  } : {}
+
+  # Determine target cluster details based on recovery mode
+  # For cross-cluster recovery, the target cluster must be pre-registered with the same BRS instance
+  target_cluster_id = var.recovery_mode == "cross-cluster" ? var.target_cluster_id : var.cluster_id
+}
+
+##############################################################################
+# Restore the backups to Same or Different Cluster
 ##############################################################################
 
 resource "ibm_backup_recovery" "recover_snapshot" {
-  for_each = { for recovery in var.recoveries : recovery.name => recovery }
+  for_each = var.enable_recovery ? { for recovery in var.recoveries : recovery.name => recovery } : {}
 
   x_ibm_tenant_id      = local.brs_tenant_id
   name                 = each.value.name
@@ -875,7 +1020,30 @@ resource "ibm_backup_recovery" "recover_snapshot" {
   }
 
   depends_on = [
+    terraform_data.wait_for_backup_run,
+    data.ibm_backup_recovery_protection_group_runs.backup_runs,
     ibm_backup_recovery_protection_group.protection_group,
     ibm_backup_recovery_source_registration.source_registration
   ]
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_recovery || length(local.latest_snapshots) > 0
+      error_message = <<-EOT
+        No backup snapshots found. Recovery cannot proceed without completed backups.
+        Either:
+        1. Increase wait_for_backup_completion to allow more time for backups to complete
+        2. Ensure protection groups have run at least one successful backup
+        3. Set enable_recovery = false to skip automatic recovery
+      EOT
+    }
+
+    precondition {
+      condition = (
+        var.recovery_mode == "same-cluster" ||
+        (var.recovery_mode == "cross-cluster" && var.target_cluster_id != null && var.target_cluster_resource_group_id != null)
+      )
+      error_message = "For cross-cluster recovery, both target_cluster_id and target_cluster_resource_group_id must be provided."
+    }
+  }
 }

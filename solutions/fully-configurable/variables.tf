@@ -784,3 +784,115 @@ variable "policies" {
     error_message = "The tiering configuration block must match the selected cloud_platform (e.g., provide 'aws_tiering' for 'AWS')."
   }
 }
+
+
+##############################################################################
+# Recovery Configuration
+##############################################################################
+
+variable "enable_recovery" {
+  description = "Enable automatic recovery testing after backup completes. When enabled, the solution will wait for a backup to complete and then trigger a recovery operation to validate the backup."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "recovery_type" {
+  description = "Type of recovery to perform. 'same-cluster' restores to the original cluster with a namespace prefix. 'cross-cluster' restores to a different target cluster."
+  type        = string
+  default     = "same-cluster"
+  nullable    = false
+
+  validation {
+    condition     = contains(["same-cluster", "cross-cluster"], var.recovery_type)
+    error_message = "`recovery_type` must be 'same-cluster' or 'cross-cluster'."
+  }
+}
+
+variable "recovery_namespace_prefix" {
+  description = "Prefix to add to namespace names during recovery. For example, 'restored-' will create 'restored-myapp' from 'myapp'."
+  type        = string
+  default     = "restored-"
+  nullable    = false
+}
+
+variable "recovery_protection_group_name" {
+  description = "Name of the protection group to recover from. If null, uses the first protection group defined in the configuration."
+  type        = string
+  default     = null
+}
+
+variable "recovery_wait_timeout_minutes" {
+  description = "Maximum time in minutes to wait for a backup to complete before triggering recovery."
+  type        = number
+  default     = 45
+  nullable    = false
+
+  validation {
+    condition     = var.recovery_wait_timeout_minutes > 0 && var.recovery_wait_timeout_minutes <= 120
+    error_message = "`recovery_wait_timeout_minutes` must be between 1 and 120 minutes."
+  }
+}
+
+variable "recovery_poll_interval_seconds" {
+  description = "Interval in seconds between backup status checks while waiting for backup completion."
+  type        = number
+  default     = 30
+  nullable    = false
+
+  validation {
+    condition     = var.recovery_poll_interval_seconds >= 10 && var.recovery_poll_interval_seconds <= 300
+    error_message = "`recovery_poll_interval_seconds` must be between 10 and 300 seconds."
+  }
+}
+
+##############################################################################
+# Cross-Cluster Recovery Configuration
+##############################################################################
+
+variable "target_cluster_id" {
+  description = "Target cluster ID for cross-cluster recovery. Required when `recovery_type` is 'cross-cluster'."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.recovery_type != "cross-cluster" || var.target_cluster_id != null
+    error_message = "`target_cluster_id` is required when `recovery_type` is 'cross-cluster'."
+  }
+}
+
+variable "target_cluster_resource_group_id" {
+  description = "Target cluster resource group ID for cross-cluster recovery. Required when `recovery_type` is 'cross-cluster'."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.recovery_type != "cross-cluster" || var.target_cluster_resource_group_id != null
+    error_message = "`target_cluster_resource_group_id` is required when `recovery_type` is 'cross-cluster'."
+  }
+}
+
+variable "target_cluster_config_endpoint_type" {
+  description = "Endpoint type for target cluster config access in cross-cluster recovery. Valid values: 'default', 'private', 'vpe', 'link'."
+  type        = string
+  default     = "private"
+  nullable    = false
+
+  validation {
+    condition     = contains(["default", "private", "vpe", "link"], var.target_cluster_config_endpoint_type)
+    error_message = "`target_cluster_config_endpoint_type` must be 'default', 'private', 'vpe', or 'link'."
+  }
+}
+
+variable "target_brs_connection_name" {
+  description = "Name for the BRS connection to the target cluster in cross-cluster recovery. If null, defaults to '{cluster_id}-target-connection'."
+  type        = string
+  default     = null
+}
+
+variable "target_create_dsc_worker_pool" {
+  description = "Create dedicated worker pool for Data Source Connector on target cluster in cross-cluster recovery."
+  type        = bool
+  default     = true
+  nullable    = false
+}

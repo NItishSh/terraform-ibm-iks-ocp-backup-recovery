@@ -375,6 +375,102 @@
             {
               "key": "resource_tags",
               "display_name": "Resource Tags"
+            },
+            {
+              "key": "enable_recovery",
+              "display_name": "Enable Automatic Recovery Testing",
+              "description": "Enable automatic recovery testing after backup completes. When enabled, the solution will trigger an immediate backup, wait for completion, and then automatically restore the backup to validate data integrity. Default: false"
+            },
+            {
+              "key": "recovery_type",
+              "display_name": "Recovery Type",
+              "description": "Choose the recovery destination: 'Same Cluster' restores namespaces to the original cluster with a prefix (e.g., 'restored-myapp'). 'Cross Cluster' restores to a different target cluster for disaster recovery or migration scenarios. Default: same_cluster",
+              "options": [
+                {
+                  "displayname": "Same Cluster",
+                  "value": "same_cluster"
+                },
+                {
+                  "displayname": "Cross Cluster",
+                  "value": "cross_cluster"
+                }
+              ]
+            },
+            {
+              "key": "recovery_namespace_prefix",
+              "display_name": "Recovery Namespace Prefix",
+              "description": "Prefix added to namespace names during recovery to avoid conflicts with existing namespaces. For example, 'restored-' will create 'restored-production' from 'production'. This allows you to test recovery without affecting running workloads. Default: 'restored-'"
+            },
+            {
+              "key": "recovery_protection_group_name",
+              "display_name": "Recovery Protection Group Name",
+              "description": "Specify which protection group to recover from. Leave empty to automatically use the first protection group defined in your configuration. This is useful when you have multiple protection groups and want to test recovery of a specific one."
+            },
+            {
+              "key": "recovery_wait_timeout_minutes",
+              "display_name": "Recovery Wait Timeout (Minutes)",
+              "description": "Maximum time to wait for the initial backup to complete before triggering recovery. The solution actively polls the backup status during this period. Increase this value for large clusters or slow networks. Valid range: 1-120 minutes. Default: 45 minutes"
+            },
+            {
+              "key": "recovery_poll_interval_seconds",
+              "display_name": "Recovery Poll Interval (Seconds)",
+              "description": "How often to check backup status while waiting for completion. Lower values provide faster detection of completed backups but increase API calls. Valid range: 10-300 seconds. Default: 30 seconds"
+            },
+            {
+              "key": "target_cluster_id",
+              "display_name": "Target Cluster (Cross-Cluster Recovery)",
+              "description": "Select the target cluster where backups will be restored for cross-cluster recovery. This cluster must be in the same region as the BRS instance. Required when recovery_type is 'cross_cluster'. The target cluster will be automatically registered with the same BRS instance.",
+              "custom_config": {
+                "type": "cluster_var",
+                "grouping": "deployment",
+                "original_grouping": "deployment"
+              }
+            },
+            {
+              "key": "target_cluster_resource_group_id",
+              "display_name": "Target Cluster Resource Group (Cross-Cluster)",
+              "description": "Resource group of the target cluster for cross-cluster recovery. Required when recovery_type is 'cross_cluster'. Must have appropriate permissions to access this resource group.",
+              "custom_config": {
+                "type": "resource_group",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "identifier": "rg_id"
+                }
+              }
+            },
+            {
+              "key": "target_cluster_config_endpoint_type",
+              "display_name": "Target Cluster Endpoint Type (Cross-Cluster)",
+              "description": "Endpoint type for accessing the target cluster configuration. 'Private' is recommended for security. 'Default' uses the cluster's default endpoint. 'VPE' and 'Link' are for advanced networking scenarios. Default: private",
+              "options": [
+                {
+                  "displayname": "Default",
+                  "value": "default"
+                },
+                {
+                  "displayname": "Private",
+                  "value": "private"
+                },
+                {
+                  "displayname": "VPE",
+                  "value": "vpe"
+                },
+                {
+                  "displayname": "Link",
+                  "value": "link"
+                }
+              ]
+            },
+            {
+              "key": "target_brs_connection_name",
+              "display_name": "Target BRS Connection Name (Cross-Cluster)",
+              "description": "Custom name for the BRS connection to the target cluster. Leave empty to auto-generate a name based on the cluster ID (format: '{cluster_id}-target-connection'). This connection is used to register the target cluster with the BRS instance."
+            },
+            {
+              "key": "target_create_dsc_worker_pool",
+              "display_name": "Create DSC Worker Pool on Target (Cross-Cluster)",
+              "description": "Create a dedicated worker pool for the Data Source Connector on the target cluster. Recommended for production to isolate backup operations from application workloads. Set to false to deploy DSC on existing worker nodes. Default: true"
             }
           ],
           "dependencies": [],

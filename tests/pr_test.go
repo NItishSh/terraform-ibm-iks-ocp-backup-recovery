@@ -28,6 +28,7 @@ const resourceGroup = "geretain-test-resources"
 const fullyConfigurableTerraformDir = "solutions/fully-configurable"
 const iksExampleDir = "examples/kubernetes"
 const ocpExampleDir = "examples/openshift"
+const crossClusterExampleDir = "examples/backup-recovery-cross-cluster"
 
 var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "common-dev-assets", "examples", "tests", "reference-architectures"}
 
@@ -242,6 +243,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
 			"module.protect_cluster.kubernetes_cluster_role_binding_v1.brsagent_admin",
 			"module.protect_cluster.kubernetes_namespace_v1.dsc_namespace",
+			"module.protect_cluster.time_sleep.wait_for_source_discovery",
 		},
 	}
 	options.IgnoreDestroys = testhelper.Exemptions{
@@ -302,6 +304,27 @@ func TestRunOCPExample(t *testing.T) {
 		"module.ocp_base[0].ibm_container_vpc_cluster.cluster[0]",
 		"ibm_container_cluster.cluster[0]",
 	})
+
+	output, err := options.RunTestConsistency()
+	assert.NoError(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
+}
+
+func TestRunCrossClusterExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupOptions(t, "brs-cross", crossClusterExampleDir, []string{
+		"module.source_backup_recovery.ibm_backup_recovery_source_registration.source_registration",
+		"module.target_backup_recovery.ibm_backup_recovery_source_registration.source_registration",
+		"module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_connection_registration_token.registration_token[0]",
+		"module.target_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_connection_registration_token.registration_token[0]",
+		"ibm_container_vpc_cluster.source_cluster[0]",
+		"ibm_container_vpc_cluster.target_cluster[0]",
+	})
+
+	options.IgnoreUpdates.List = append(options.IgnoreUpdates.List,
+		fmt.Sprintf(`module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_protection_policy.protection_policy["%s-continuous-backup"]`, options.Prefix),
+	)
 
 	output, err := options.RunTestConsistency()
 	assert.NoError(t, err, "This should not have errored")
