@@ -156,28 +156,25 @@ module "dsc_sg_rule" {
       name      = "allow-outbound-443-from-cdsc-to-brs-dataplane"
       direction = "outbound"
       remote    = "0.0.0.0/0"
-      tcp = {
-        port_max = 443
-        port_min = 443
-      }
+      protocol  = "tcp"
+      port_min  = 443
+      port_max  = 443
     },
     {
       name      = "allow-outbound-29991-from-cdsc-to-brs-dataplane"
       direction = "outbound"
       remote    = "0.0.0.0/0"
-      tcp = {
-        port_max = 29991
-        port_min = 29991
-      }
+      protocol  = "tcp"
+      port_min  = 29991
+      port_max  = 29991
     },
     {
       name      = "allow-outbound-${local.cluster_endpoint_port}-from-cdsc-to-cluster-api"
       direction = "outbound"
       remote    = "0.0.0.0/0"
-      tcp = {
-        port_max = local.cluster_endpoint_port
-        port_min = local.cluster_endpoint_port
-      }
+      protocol  = "tcp"
+      port_min  = local.cluster_endpoint_port
+      port_max  = local.cluster_endpoint_port
     }
   ]
 }
