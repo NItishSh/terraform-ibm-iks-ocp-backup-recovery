@@ -384,15 +384,15 @@
             {
               "key": "recovery_type",
               "display_name": "Recovery Type",
-              "description": "Choose the recovery destination: 'Same Cluster' restores namespaces to the original cluster with a prefix (e.g., 'restored-myapp'). 'Cross Cluster' restores to a different target cluster for disaster recovery or migration scenarios. Default: same_cluster",
+              "description": "Choose the recovery destination: 'Same Cluster' restores namespaces to the original cluster with a prefix (e.g., 'restored-myapp'). 'Cross Cluster' restores to a different target cluster for disaster recovery or migration scenarios. Default: same-cluster",
               "options": [
                 {
                   "displayname": "Same Cluster",
-                  "value": "same_cluster"
+                  "value": "same-cluster"
                 },
                 {
                   "displayname": "Cross Cluster",
-                  "value": "cross_cluster"
+                  "value": "cross-cluster"
                 }
               ]
             },
@@ -419,7 +419,7 @@
             {
               "key": "target_cluster_id",
               "display_name": "Target Cluster (Cross-Cluster Recovery)",
-              "description": "Select the target cluster where backups will be restored for cross-cluster recovery. This cluster must be in the same region as the BRS instance. Required when recovery_type is 'cross_cluster'. The target cluster will be automatically registered with the same BRS instance.",
+              "description": "Select the target cluster where backups will be restored for cross-cluster recovery. This cluster must be in the same region as the BRS instance. Required when recovery_type is 'cross-cluster'. The target cluster will be automatically registered with the same BRS instance.",
               "custom_config": {
                 "type": "cluster_var",
                 "grouping": "deployment",
@@ -429,7 +429,7 @@
             {
               "key": "target_cluster_resource_group_id",
               "display_name": "Target Cluster Resource Group (Cross-Cluster)",
-              "description": "Resource group of the target cluster for cross-cluster recovery. Required when recovery_type is 'cross_cluster'. Must have appropriate permissions to access this resource group.",
+              "description": "Resource group of the target cluster for cross-cluster recovery. Required when recovery_type is 'cross-cluster'. Must have appropriate permissions to access this resource group.",
               "custom_config": {
                 "type": "resource_group",
                 "grouping": "deployment",
