@@ -212,7 +212,7 @@ resource "terraform_data" "wait_for_backup" {
   ]
 
   input = {
-    url                   = "https://${module.protect_cluster.brs_instance_guid}.${local.region}.backup-recovery.cloud.ibm.com"
+    url                   = module.protect_cluster.brs_instance_url
     tenant                = module.protect_cluster.brs_tenant_id
     endpoint_type         = var.brs_endpoint_type
     instance_id           = module.protect_cluster.brs_instance_guid
@@ -232,19 +232,6 @@ resource "terraform_data" "wait_for_backup" {
   }
 }
 
-# Read the snapshot ID from the file created by polling
-data "local_file" "snapshot_info" {
-  count = var.enable_recovery ? 1 : 0
-
-  filename = "/tmp/backup_snapshot_${module.protect_cluster.brs_instance_guid}.json"
-
-  depends_on = [terraform_data.wait_for_backup]
-}
-
-locals {
-  snapshot_data = var.enable_recovery ? jsondecode(data.local_file.snapshot_info[0].content) : null
-}
-
 ##############################################################################
 # Same-Cluster Recovery
 ##############################################################################
@@ -253,13 +240,12 @@ resource "terraform_data" "same_cluster_recovery" {
   count = var.enable_recovery && var.recovery_type == "same-cluster" ? 1 : 0
 
   input = {
-    url              = "https://${module.protect_cluster.brs_instance_guid}.${local.region}.backup-recovery.cloud.ibm.com"
+    url              = module.protect_cluster.brs_instance_url
     tenant           = module.protect_cluster.brs_tenant_id
     endpoint_type    = var.brs_endpoint_type
     instance_id      = module.protect_cluster.brs_instance_guid
     source_pg_id     = local.recovery_pg_id
     target_source_id = split("::", module.protect_cluster.source_registration_id)[1]
-    snapshot_id      = local.snapshot_data.snapshot_id
     api_key          = sensitive(var.ibmcloud_api_key)
     recovery_name    = "recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
     binaries_path    = "/tmp"
@@ -267,7 +253,10 @@ resource "terraform_data" "same_cluster_recovery" {
   }
 
   provisioner "local-exec" {
+    # wait_for_backup_run.sh writes snapshot info to this file before this resource is applied.
+    # jq is available in the Schematics environment (used by wait_for_backup_run.sh itself).
     command = <<-EOT
+      SNAPSHOT_ID=$(jq -r '.snapshot_id' /tmp/backup_snapshot_${self.input.instance_id}.json)
       ${path.module}/../../scripts/trigger_cross_cluster_recovery.sh \
         '${self.input.url}' \
         '${self.input.tenant}' \
@@ -275,7 +264,7 @@ resource "terraform_data" "same_cluster_recovery" {
         '${self.input.instance_id}' \
         '${self.input.source_pg_id}' \
         '${self.input.target_source_id}' \
-        '${self.input.snapshot_id}' \
+        "$SNAPSHOT_ID" \
         '${self.input.recovery_name}' \
         '${self.input.namespace_prefix}' \
         '${self.input.binaries_path}'
@@ -285,10 +274,7 @@ resource "terraform_data" "same_cluster_recovery" {
     }
   }
 
-  depends_on = [
-    terraform_data.wait_for_backup,
-    data.local_file.snapshot_info
-  ]
+  depends_on = [terraform_data.wait_for_backup]
 }
 
 ##############################################################################
@@ -299,13 +285,12 @@ resource "terraform_data" "cross_cluster_recovery" {
   count = var.enable_recovery && var.recovery_type == "cross-cluster" ? 1 : 0
 
   input = {
-    url              = "https://${module.protect_cluster.brs_instance_guid}.${local.region}.backup-recovery.cloud.ibm.com"
+    url              = module.protect_cluster.brs_instance_url
     tenant           = module.protect_cluster.brs_tenant_id
     endpoint_type    = var.brs_endpoint_type
     instance_id      = module.protect_cluster.brs_instance_guid
     source_pg_id     = local.recovery_pg_id
     target_source_id = split("::", module.target_cluster_registration[0].source_registration_id)[1]
-    snapshot_id      = local.snapshot_data.snapshot_id
     api_key          = sensitive(var.ibmcloud_api_key)
     recovery_name    = "cross-cluster-recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
     binaries_path    = "/tmp"
@@ -313,7 +298,10 @@ resource "terraform_data" "cross_cluster_recovery" {
   }
 
   provisioner "local-exec" {
+    # wait_for_backup_run.sh writes snapshot info to this file before this resource is applied.
+    # jq is available in the Schematics environment (used by wait_for_backup_run.sh itself).
     command = <<-EOT
+      SNAPSHOT_ID=$(jq -r '.snapshot_id' /tmp/backup_snapshot_${self.input.instance_id}.json)
       ${path.module}/../../scripts/trigger_cross_cluster_recovery.sh \
         '${self.input.url}' \
         '${self.input.tenant}' \
@@ -321,7 +309,7 @@ resource "terraform_data" "cross_cluster_recovery" {
         '${self.input.instance_id}' \
         '${self.input.source_pg_id}' \
         '${self.input.target_source_id}' \
-        '${self.input.snapshot_id}' \
+        "$SNAPSHOT_ID" \
         '${self.input.recovery_name}' \
         '${self.input.namespace_prefix}' \
         '${self.input.binaries_path}'
@@ -333,7 +321,6 @@ resource "terraform_data" "cross_cluster_recovery" {
 
   depends_on = [
     terraform_data.wait_for_backup,
-    data.local_file.snapshot_info,
     module.target_cluster_registration,
     time_sleep.wait_for_target_registration
   ]

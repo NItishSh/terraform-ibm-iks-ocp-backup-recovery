@@ -55,7 +55,7 @@ output "recovery_protection_group_name" {
 
 output "recovery_snapshot_id" {
   description = "Snapshot ID used for recovery"
-  value       = var.enable_recovery ? try(local.snapshot_data.snapshot_id, null) : null
+  value       = null
   sensitive   = true
 }
 

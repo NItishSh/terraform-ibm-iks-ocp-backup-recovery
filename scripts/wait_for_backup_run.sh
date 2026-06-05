@@ -138,7 +138,16 @@ main() {
 
   local deadline
   deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
-  echo "Deadline: $(date -r $deadline)" | tee -a "$debug_file" >&2
+  # Use portable date formatting that works on both Linux and macOS
+  local deadline_str
+  if date --version >/dev/null 2>&1; then
+    # GNU date (Linux)
+    deadline_str=$(date -d "@$deadline" 2>/dev/null || echo "timestamp: $deadline")
+  else
+    # BSD date (macOS)
+    deadline_str=$(date -r "$deadline" 2>/dev/null || echo "timestamp: $deadline")
+  fi
+  echo "Deadline: $deadline_str" | tee -a "$debug_file" >&2
   echo "Entering polling loop..." | tee -a "$debug_file" >&2
 
   while [ "$(date +%s)" -lt "$deadline" ]; do
