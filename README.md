@@ -403,6 +403,7 @@ You need the following permissions to run this module:
 | <a name="output_backup_runs_summary"></a> [backup\_runs\_summary](#output\_backup\_runs\_summary) | Summary of backup runs per protection group. Shows run count and latest run status. Empty if `var.enable_recovery` is `false`. |
 | <a name="output_brs_instance_crn"></a> [brs\_instance\_crn](#output\_brs\_instance\_crn) | CRN of the Backup & Recovery Service instance |
 | <a name="output_brs_instance_guid"></a> [brs\_instance\_guid](#output\_brs\_instance\_guid) | GUID of the Backup & Recovery Service instance |
+| <a name="output_brs_instance_url"></a> [brs\_instance\_url](#output\_brs\_instance\_url) | Endpoint URL for the BRS instance, derived from the IBM Cloud resource extensions. Correct for both staging and production environments. |
 | <a name="output_brs_tags"></a> [brs\_tags](#output\_brs\_tags) | BRS tags that should be added to the cluster to prevent tag drift. Include these in your cluster's tags input. |
 | <a name="output_brs_tenant_id"></a> [brs\_tenant\_id](#output\_brs\_tenant\_id) | Tenant ID of the Backup & Recovery Service instance |
 | <a name="output_connection_id"></a> [connection\_id](#output\_connection\_id) | ID of the data source connection to the Backup & Recovery Service instance |
