@@ -365,6 +365,14 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 ##############################################################################
 # Source Registration
 ##############################################################################
+
+# Wait for DSC to stabilize after helm installation before source registration
+resource "time_sleep" "wait_for_dsc_stabilization" {
+  depends_on = [helm_release.data_source_connector]
+
+  create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
+}
+
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
@@ -395,6 +403,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 
   depends_on = [
     helm_release.data_source_connector,
+    time_sleep.wait_for_dsc_stabilization,
     time_sleep.brs_source_deregistration_wait,
     module.backup_recovery_instance,
   ]
