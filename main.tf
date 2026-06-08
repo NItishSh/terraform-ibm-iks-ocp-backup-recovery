@@ -365,14 +365,6 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 ##############################################################################
 # Source Registration
 ##############################################################################
-
-# Wait for DSC to stabilize after helm installation before source registration
-resource "time_sleep" "wait_for_dsc_stabilization" {
-  depends_on = [helm_release.data_source_connector]
-
-  create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
-}
-
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
@@ -403,7 +395,6 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 
   depends_on = [
     helm_release.data_source_connector,
-    time_sleep.wait_for_dsc_stabilization,
     time_sleep.brs_source_deregistration_wait,
     module.backup_recovery_instance,
   ]
@@ -417,7 +408,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # namespace wait, giving BRS time to process the async deregistration.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "180s"
+  destroy_duration = "5m" # Increased to allow sufficient time for async deregistration
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.
@@ -853,7 +844,7 @@ resource "terraform_data" "cancel_pg_runs" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "${path.module}/scripts/cancel_pg_runs.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.protection_group_id}'"
+    command     = "${path.module}/scripts/cancel_pg_runs.sh 'https://${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.protection_group_id}'"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       API_KEY = self.triggers_replace.api_key
@@ -903,7 +894,7 @@ resource "terraform_data" "delete_auto_protect_pg" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "${path.module}/scripts/delete_auto_protect_pg.sh ${self.input.url} ${self.input.tenant} ${self.input.endpoint_type} ${self.input.protection_group_id} ${self.input.registration_id}"
+    command     = "${path.module}/scripts/delete_auto_protect_pg.sh https://${self.input.url} ${self.input.tenant} ${self.input.endpoint_type} ${self.input.protection_group_id} ${self.input.registration_id}"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       API_KEY = self.triggers_replace.api_key
