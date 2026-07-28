@@ -66,14 +66,8 @@ locals {
       operating_system = "RHCOS"
     }
   ]
-}
 
-locals {
-  cluster_name              = "${var.prefix}-cluster"
-  existing_brs_instance_crn = var.existing_brs_instance_crn == "" ? null : var.existing_brs_instance_crn
-  # brs_region is set to cluster region when creating a new BRS instance
-  # otherwise it is set to the region of the existing BRS instance
-  brs_region = local.existing_brs_instance_crn != null ? module.crn_parser[0].region : var.region
+  cluster_name = "${var.prefix}-cluster"
 }
 
 module "ocp_base" {
@@ -89,26 +83,4 @@ module "ocp_base" {
   vpc_subnets          = local.cluster_vpc_subnets
   worker_pools         = local.worker_pools
   access_tags          = []
-}
-
-module "crn_parser" {
-  source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
-  version = "1.5.0"
-  count   = local.existing_brs_instance_crn == null ? 0 : 1
-  crn     = local.existing_brs_instance_crn
-}
-
-module "backup_recovery_instance" {
-  source                    = "terraform-ibm-modules/backup-recovery/ibm"
-  version                   = "1.12.2"
-  region                    = local.brs_region
-  resource_group_id         = module.resource_group.resource_group_id
-  ibmcloud_api_key          = var.ibmcloud_api_key
-  resource_tags             = var.resource_tags
-  instance_name             = "${var.prefix}-brs-instance"
-  connection_name           = "${var.prefix}-brs-connection-RoksVpc"
-  create_new_connection     = true
-  connection_env_type       = "kRoksVpc"
-  existing_brs_instance_crn = var.existing_brs_instance_crn == "" ? null : var.existing_brs_instance_crn
-  policies                  = []
 }

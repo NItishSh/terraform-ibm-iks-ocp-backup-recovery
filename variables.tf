@@ -94,14 +94,14 @@ variable "add_dsc_rules_to_cluster_sg" {
 variable "dsc_chart_uri" {
   description = "The full OCI registry URI for the Data Source Connector Helm chart, including the digest."
   type        = string
-  default     = "oci://icr.io/ext/brs/brs-ds-connector-chart:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
+  default     = "oci://icr.io/brs-charts/brs-ds-connector-chart:7.3.12-release-20260713-2e7241a2@sha256:b6a39948f5d1b6f765d0e73ebd2dd9c700ba0d5d5a120969efdfce2f75e8467e"
   nullable    = false
 }
 
 variable "dsc_image_version" {
   description = "Container image for the Data Source Connector."
   type        = string
-  default     = "icr.io/ext/brs/brs-ds-connector:7.2.18-release-20260226-49768040@sha256:99728a3146a7d8b2ae2f88300a6a89752488d3733e29118ee83a655959114541"
+  default     = "icr.io/ext/brs/brs-ds-connector:7.3.12-release-20260713-2e7241a2@sha256:01b4fb26764c854a141c1e3dfb3be5c1b2dc6dda397f6532fc3c84136ca0698d"
 
   validation {
     condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
@@ -570,11 +570,11 @@ variable "registration_images" {
     init_container              = optional(string, null)
   })
   default = {
-    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.2.18@sha256:f347698eb6180645d8c1b71d69a9fc40bb7c0bd14e5cdece9b7da79af74e8262"
-    velero                      = "icr.io/ext/brs/oadp-velero:1.3.8@sha256:2d0014471b5c0e46cf96ac452069b9fa1ebbffd1d50a8ffecb2b443dbfbd4b00"
-    velero_aws_plugin           = "icr.io/ext/brs/oadp-velero-plugin-for-aws:1.3.8@sha256:3adcd0bfa963f980ad41dbff05c44c4b11d6b07e493a9c53a0ee3483a905039d"
-    velero_openshift_plugin     = "icr.io/ext/brs/oadp-velero-plugin-for-openshift:1.4.7@sha256:8b5dcea0fc837e5547c253f355d71b19f825eed6fac1e19c40af44b19fd7259a"
-    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.2.18@sha256:629fdf6852a9583674c41fc1ccbab3006c737067f5dccafbee2fe36fbc6ee748"
+    data_mover                  = "icr.io/ext/brs/cohesity-datamover:7.3.12@sha256:0a0e87ddce1165398390656e6ff9465815a105a79c427030f284bffbc2b7d987"
+    velero                      = "icr.io/ext/brs/oadp-velero:1.5.5@sha256:386ef8dff743339a40b3b82a1fcdc9bda56c0d31a0b544acae59058d522db8d7"
+    velero_aws_plugin           = "icr.io/ext/brs/oadp-velero-plugin-for-aws:1.5.5@sha256:93a7f4c514546a1d771186b8e60722d3b1632190ebc02f4a8e75e8fe0f867ced"
+    velero_openshift_plugin     = "icr.io/ext/brs/oadp-velero-plugin-for-openshift:1.5.5@sha256:130894d2eca06a0e5eb49b969c03c99ed0d5a9d0cac83126e360442d438c9f2d"
+    cohesity_dataprotect_plugin = "icr.io/ext/brs/cohesity-dataprotect-plugin:7.3.12@sha256:7c68cf893694f1057c700cfe223fdd86ae455889295f9f353c22d9d443170182"
   }
   nullable = false
 }

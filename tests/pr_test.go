@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,14 +16,11 @@ import (
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/terraform-ibm-modules/ibmcloud-terratest-wrapper/cloudinfo"
 	"github.com/terraform-ibm-modules/ibmcloud-terratest-wrapper/common"
 	"github.com/terraform-ibm-modules/ibmcloud-terratest-wrapper/testhelper"
 	"github.com/terraform-ibm-modules/ibmcloud-terratest-wrapper/testschematic"
 )
 
-// Use existing resource group
-// const resourceGroup = "geretain-test-resources"
 const resourceGroup = "BRT-General-testing"
 const existing_brs_instance_crn = "crn:v1:bluemix:public:backup-recovery:au-syd:a/7d8f9e928b9d6c2dfa06475946765e01:4dde55c7-e8a8-48c8-b431-c226f75090f7::"
 const fullyConfigurableTerraformDir = "solutions/fully-configurable"
@@ -36,19 +32,12 @@ var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "c
 
 var includeFiletypes = []string{".tf", ".yaml", ".py", ".tpl", ".md", ".sh"}
 
-const yamlLocation = "../common-dev-assets/common-go-assets/common-permanent-resources.yaml"
-
 // Current supported regions
 var validRegions = []string{
 	"us-south",
 	"us-east",
 	"eu-es",
 }
-
-var (
-	sharedInfoSvc      *cloudinfo.CloudInfoService
-	permanentResources map[string]interface{}
-)
 
 type tarIncludePatterns struct {
 	excludeDirs []string
@@ -91,35 +80,35 @@ func walk(r *tarIncludePatterns, s string, d fs.DirEntry, err error) error {
 	return nil
 }
 
-// TestMain will be run before any parallel tests, used to set up a shared InfoService object to track region usage
-// for multiple tests
+// TestMain sets up shared services before running tests.
 func TestMain(m *testing.M) {
-	sharedInfoSvc, _ = cloudinfo.NewCloudInfoServiceFromEnv("TF_VAR_ibmcloud_api_key", cloudinfo.CloudInfoServiceOptions{})
-
-	var err error
-	permanentResources, err = common.LoadMapFromYaml(yamlLocation)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	os.Exit(m.Run())
 }
 
-func setupTerraform(t *testing.T, prefix, realTerraformDir string) *terraform.Options {
+// setupTerraform provisions a temporary copy of realTerraformDir, applies it,
+// and returns the options. Optional extraVars are merged into the base vars
+// (prefix, region, resource_group) before the apply — use this when the target
+// stack declares additional variables (e.g. existing_brs_instance_crn).
+func setupTerraform(t *testing.T, prefix, realTerraformDir string, extraVars ...map[string]interface{}) *terraform.Options {
 	tempTerraformDir, err := files.CopyTerraformFolderToTemp(realTerraformDir, prefix)
 	require.NoError(t, err, "Failed to create temporary Terraform folder")
 
 	region := validRegions[common.CryptoIntn(len(validRegions))]
 
+	vars := map[string]interface{}{
+		"prefix":         prefix,
+		"region":         region,
+		"resource_group": resourceGroup,
+	}
+	for _, extra := range extraVars {
+		for k, v := range extra {
+			vars[k] = v
+		}
+	}
+
 	existingTerraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: tempTerraformDir,
-		Vars: map[string]interface{}{
-			"prefix":         prefix,
-			"region":         region,
-			"resource_group": resourceGroup,
-			// "existing_brs_instance_crn": permanentResources["brs_us_east_crn"],
-			"existing_brs_instance_crn": existing_brs_instance_crn,
-		},
+		Vars:         vars,
 		// Set Upgrade to true to ensure latest version of providers and modules are used by terratest.
 		// This is the same as setting the -upgrade=true flag with terraform.
 		Upgrade: true,
@@ -139,21 +128,6 @@ func cleanupTerraform(t *testing.T, options *terraform.Options, prefix string) {
 		return
 	}
 	logger.Log(t, "START: Destroy (existing resources)")
-	// Drop the BRS data-source connection from local state before destroy.
-	// The Schematics workspace may have already deleted the connection, causing
-	// the IBM provider's Delete to return HTTP 400 "does not exist" (provider
-	// bug: should treat this as already-gone). Removing it from state avoids
-	// the fatal error until https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906
-	// is merged and released.
-	// Exit code 1 is expected when the resource is not in state (e.g. count=0,
-	// already removed, or this stateDir belongs to resources-cross-cluster which
-	// only has source_connection/target_connection but not backup_recovery_instance).
-	// Assign to _ to make the discard explicit and satisfy the linter.
-	_, _ = terraform.RunTerraformCommandContextE(t, context.Background(), options, "state", "rm", "module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-	_, _ = terraform.RunTerraformCommandContextE(t, context.Background(), options, "state", "rm", "module.source_connection.ibm_backup_recovery_data_source_connection.connection[0]")
-	_, _ = terraform.RunTerraformCommandContextE(t, context.Background(), options, "state", "rm", "module.target_connection.ibm_backup_recovery_data_source_connection.connection[0]")
-	// Skip refresh on destroy for the same reason.
-	options.ExtraArgs.Destroy = append(options.ExtraArgs.Destroy, "-refresh=false")
 	terraform.DestroyContext(t, context.Background(), options)
 	terraform.WorkspaceDeleteContext(t, context.Background(), options, prefix)
 	logger.Log(t, "END: Destroy (existing resources)")
@@ -165,13 +139,12 @@ func getSchematicTerraformVars(t *testing.T, prefix string, options *testschemat
 		{Name: "cluster_id", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "workload_cluster_id"), DataType: "string"},
 		{Name: "cluster_resource_group_id", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "cluster_resource_group_id"), DataType: "string"},
 		{Name: "enable_auto_protect", Value: "false", DataType: "bool"},
-		// {Name: "existing_brs_instance_crn", Value: permanentResources["brs_us_east_crn"], DataType: "string"},
 		{Name: "existing_brs_instance_crn", Value: existing_brs_instance_crn, DataType: "string"},
-		{Name: "brs_connection_name", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "brs_connection_name"), DataType: "string"},
+		{Name: "brs_connection_name", Value: fmt.Sprintf("%s-conn", prefix), DataType: "string"},
 		{Name: "brs_endpoint_type", Value: "public", DataType: "string"},
 		{Name: "cluster_config_endpoint_type", Value: "private", DataType: "string"},
 		{Name: "dsc_replicas", Value: "1", DataType: "number"},
-		{Name: "brs_create_new_connection", Value: "false", DataType: "bool"},
+		{Name: "brs_create_new_connection", Value: "true", DataType: "bool"},
 		{Name: "region", Value: terraform.OutputContext(t, context.Background(), existingTerraformOptions, "region"), DataType: "string"},
 		{Name: "connection_env_type", Value: "kRoksVpc", DataType: "string"},
 		{Name: "kube_type", Value: "openshift", DataType: "string"},
@@ -234,29 +207,13 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 			"module.protect_cluster.terraform_data.wait_for_dsc_node_ready[0]",
 		},
 	}
-	// Skip the Schematics pre-destroy refresh AND the actual destroy refresh.
-	//
-	// Schematics runs "terraform refresh" before every destroy job. In Terraform
-	// 1.12 "terraform refresh" is an alias for "terraform apply -refresh-only
-	// -auto-approve", so TF_CLI_ARGS_apply affects it. Passing -refresh=false
-	// makes that pre-destroy refresh a no-op, which prevents the IBM provider's
-	// CustomizeDiff on ibm_backup_recovery_connection_registration_token from
-	// firing and hard-erroring during the refresh step.
-	//
-	// TF_CLI_ARGS_apply=-refresh=false is safe here: the workspace is freshly
-	// created for each test run and the apply creates all resources from scratch,
-	// so there is no prior state to reconcile during apply. The token is
-	// generated by a time_rotating + token resource chain that does not require
-	// a live provider read to produce its initial value.
-	//
-	// TF_CLI_ARGS_destroy=-refresh=false skips the inline refresh inside the
-	// destroy command itself (a separate code path from the pre-destroy refresh).
-	//
-	// Both can be removed once
-	// https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906 is merged
-	// and a new provider version is released.
-	options.AddWorkspaceEnvVar("TF_CLI_ARGS_apply", "-refresh=false", false, false)
-	options.AddWorkspaceEnvVar("TF_CLI_ARGS_destroy", "-refresh=false", false, false)
+	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
+	// Schematics runs "terraform refresh" (= apply -refresh-only) before every destroy.
+	// TF_CLI_ARGS_apply=-refresh=false makes it a no-op, preventing CustomizeDiff on
+	// ibm_backup_recovery_connection_registration_token from hard-erroring.
+	// TF_CLI_ARGS_destroy=-refresh=false skips the inline pre-destroy refresh.
+	// options.AddWorkspaceEnvVar("TF_CLI_ARGS_apply", "-refresh=false", false, false)
+	// options.AddWorkspaceEnvVar("TF_CLI_ARGS_destroy", "-refresh=false", false, false)
 	require.NoError(t, options.RunSchematicTest(), "This should not have errored")
 }
 
@@ -282,18 +239,10 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 		DeleteWorkspaceOnFail: false,
 	})
 
-	// Use create_new_connection=true for the upgrade test so the base apply
-	// (which runs old v1.10.4 code) takes the ibm_backup_recovery_data_source_connection
-	// creation path instead of the data-source lookup path.  With create_new_connection=false
-	// the old module indexes data.ibm_backup_recovery_data_source_connections.connections[0].connections[0]
-	// directly, which panics when BRS returns a null connections array (a known v1.10.4 bug
-	// fixed in v1.12.2 via try()).  Schematics caches .terraform/ between the base apply and
-	// the upgrade plan, so the cached v1.10.4 module would also be used during the plan step.
 	vars := getSchematicTerraformVars(t, prefix, options, existingTerraformOptions)
+	// Override connection name to distinguish the upgrade test's connection from
+	// the standard schematics test's connection when running in parallel.
 	for i, v := range vars {
-		if v.Name == "brs_create_new_connection" {
-			vars[i].Value = "true"
-		}
 		if v.Name == "brs_connection_name" {
 			vars[i].Value = fmt.Sprintf("%s-upgrade-conn", prefix)
 		}
@@ -312,6 +261,10 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// from the base version. Post-merge this becomes a plain in-place update
 			// (covered by IgnoreUpdates below).
 			"module.protect_cluster.terraform_data.wait_before_helm_destroy",
+			// wait_for_source_discovery is replaced (delete+create) on upgrade
+			// because its trigger (connection_id) changes between the base and the
+			// new connection. Must be exempted from both IgnoreDestroys and IgnoreAdds.
+			"module.protect_cluster.time_sleep.wait_for_source_discovery",
 		},
 	}
 	options.IgnoreAdds = testhelper.Exemptions{
@@ -323,6 +276,9 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// does not exist in the base version. The upgrade plan will show it
 			// as an add, which is expected and harmless.
 			"module.protect_cluster.terraform_data.wait_for_dsc_node_ready[0]",
+			// wait_for_source_discovery is replaced on upgrade because its
+			// trigger (connection_id) changes between the base and new connection.
+			"module.protect_cluster.time_sleep.wait_for_source_discovery",
 		},
 	}
 	options.IgnoreUpdates = testhelper.Exemptions{
@@ -340,28 +296,18 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// That path differs between Schematics jobs (each runs in a fresh
 			// temp dir), causing a side-effect-free in-place update.
 			"module.protect_cluster.terraform_data.wait_for_dsc_node_ready[0]",
+			// source_registration is updated in-place on upgrade because the new
+			// module version registers updated image versions against the same source.
+			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
 		},
 	}
 
-	// Skip the pre-destroy terraform refresh and the destroy-inline refresh.
-	//
-	// Schematics runs "terraform refresh" (= "terraform apply -refresh-only
-	// -auto-approve" in TF 1.12) before every destroy job. TF_CLI_ARGS_apply
-	// propagates into that pre-destroy refresh step and makes it a no-op,
-	// preventing the IBM provider from hard-erroring on a stale or missing
-	// ibm_backup_recovery_data_source_connection entry in state (which happens
-	// when the APPLY itself failed before creating the connection).
-	//
-	// This is safe for the upgrade test: the base apply creates a fresh
-	// workspace with no existing state, and the upgrade apply re-applies to
-	// in-place update resources — neither needs a live provider refresh since
-	// all managed objects are known from state or newly created.
-	//
-	// Both vars can be removed once
-	// https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906 is merged
-	// and a new provider version is released.
-	options.AddWorkspaceEnvVar("TF_CLI_ARGS_apply", "-refresh=false", false, false)
-	options.AddWorkspaceEnvVar("TF_CLI_ARGS_destroy", "-refresh=false", false, false)
+	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
+	// Same reason as TestRunFullyConfigurableInSchematics — prevents the Schematics
+	// pre-destroy refresh and inline destroy refresh from hard-erroring on stale
+	// ibm_backup_recovery_data_source_connection state.
+	// options.AddWorkspaceEnvVar("TF_CLI_ARGS_apply", "-refresh=false", false, false)
+	// options.AddWorkspaceEnvVar("TF_CLI_ARGS_destroy", "-refresh=false", false, false)
 	require.NoError(t, options.RunSchematicUpgradeTest(), "This should not have errored")
 }
 
@@ -382,7 +328,6 @@ func setupOptions(t *testing.T, prefix string, dir string, exemptionList []strin
 	if options.TerraformVars == nil {
 		options.TerraformVars = map[string]interface{}{}
 	}
-	// options.TerraformVars["existing_brs_instance_crn"] = permanentResources["brs_us_east_crn"]
 	options.TerraformVars["existing_brs_instance_crn"] = existing_brs_instance_crn
 
 	return options
@@ -396,26 +341,18 @@ func TestRunIKSExample(t *testing.T) {
 		"ibm_container_vpc_cluster.vpc_cluster[0]",
 		"ibm_container_cluster.cluster[0]",
 	})
-	// Skip refresh on consistency plan and destroy: stale BRS connection IDs in state
-	// cause the provider to hard-error when BRS returns "does not exist" (not HTTP 404).
-	// PostApplyHook fires after apply but before the consistency plan, so it can inject
-	// -refresh=false into Plan args. PreDestroyHook covers the destroy.
-	// Remove both once https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906
-	// is merged and a new provider version is released.
-	options.PostApplyHook = func(o *testhelper.TestOptions) error {
-		o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
-		return nil
-	}
-	options.PreDestroyHook = func(o *testhelper.TestOptions) error {
-		// Remove stale BRS connection from state before destroy. The provider's
-		// Delete hard-errors with HTTP 400 "does not exist" when the connection is
-		// already gone server-side (provider bug; fix pending PR #6906). Ignore
-		// the exit code — a non-zero means the resource wasn't in state, which is fine.
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.backup_recover_protect_iks.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false")
-		return nil
-	}
+	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
+	// Without -refresh=false, stale BRS connection IDs in state cause the provider to
+	// hard-error on HTTP 400 "does not exist" during the consistency-plan refresh (Plan)
+	// and the pre-destroy refresh (Destroy).
+	// options.PostApplyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
+	// 	return nil
+	// }
+	// options.PreDestroyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false")
+	// 	return nil
+	// }
 
 	output, err := options.RunTestConsistency()
 	assert.NoError(t, err, "This should not have errored")
@@ -430,23 +367,16 @@ func TestRunOCPExample(t *testing.T) {
 		"module.ocp_base[0].ibm_container_vpc_cluster.cluster[0]",
 		"ibm_container_cluster.cluster[0]",
 	})
-	// Skip refresh on consistency plan and destroy: stale BRS connection IDs in state
-	// cause the provider to hard-error when BRS returns "does not exist" (not HTTP 404).
-	// PostApplyHook fires after apply but before the consistency plan, so it can inject
-	// -refresh=false into Plan args. PreDestroyHook covers the destroy.
-	// Remove both once https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906
-	// is merged and a new provider version is released.
-	options.PostApplyHook = func(o *testhelper.TestOptions) error {
-		o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
-		return nil
-	}
-	options.PreDestroyHook = func(o *testhelper.TestOptions) error {
-		// Remove stale BRS connection from state before destroy (same reason as IKS above).
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.backup_recover_protect_ocp.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false")
-		return nil
-	}
+	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
+	// Same reason as TestRunIKSExample.
+	// options.PostApplyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
+	// 	return nil
+	// }
+	// options.PreDestroyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false")
+	// 	return nil
+	// }
 
 	output, err := options.RunTestConsistency()
 	assert.NoError(t, err, "This should not have errored")
@@ -470,25 +400,15 @@ func TestRunCrossClusterExample(t *testing.T) {
 	options.IgnoreUpdates.List = append(options.IgnoreUpdates.List,
 		fmt.Sprintf(`module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_protection_policy.protection_policy["%s-continuous-backup"]`, options.Prefix),
 	)
-	// Skip refresh on consistency plan and destroy: stale BRS connection IDs in state
-	// cause the provider to hard-error when BRS returns "does not exist" (not HTTP 404).
-	// PostApplyHook fires after apply but before the consistency plan, so it can inject
-	// -refresh=false into Plan args. PreDestroyHook covers the destroy.
-	// Remove both once https://github.com/IBM-Cloud/terraform-provider-ibm/pull/6906
-	// is merged and a new provider version is released.
-	options.PostApplyHook = func(o *testhelper.TestOptions) error {
-		o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
-		return nil
-	}
+	// TODO(provider-fix): re-enable -refresh=false lines once ibm provider PR #6906 is merged+released.
+	// Same reason as TestRunIKSExample. parallelism=1 is kept unconditionally — it is not
+	// provider-related; it prevents VPC destroy from racing worker-node cleanup.
+	// options.PostApplyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
+	// 	return nil
+	// }
 	options.PreDestroyHook = func(o *testhelper.TestOptions) error {
-		// Remove stale BRS connections (source + target) from state before destroy.
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.target_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		// Use parallelism=1 so cluster worker-node cleanup finishes before
-		// Terraform attempts to delete the VPCs and subnets.
-		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false", "-parallelism=1")
+		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-parallelism=1")
 		return nil
 	}
 
@@ -500,9 +420,13 @@ func TestRunCrossClusterExample(t *testing.T) {
 func TestRunCrossClusterExistingConnection(t *testing.T) {
 	t.Parallel()
 
-	// Provision pre-existing BRS connections using dedicated helper directory
+	// Provision pre-existing BRS connections using dedicated helper directory.
+	// Pass existing_brs_instance_crn so both source_connection and target_connection
+	// receive a non-null CRN for their crn_parser sub-module.
 	prefix := fmt.Sprintf("brs-xc-%s", strings.ToLower(random.UniqueID()))
-	existingTerraformOptions := setupTerraform(t, prefix, "./resources-cross-cluster")
+	existingTerraformOptions := setupTerraform(t, prefix, "./resources-cross-cluster", map[string]interface{}{
+		"existing_brs_instance_crn": existing_brs_instance_crn,
+	})
 	defer cleanupTerraform(t, existingTerraformOptions, prefix)
 
 	// The cross-cluster example must run in the same region as the pre-provisioned
@@ -523,7 +447,6 @@ func TestRunCrossClusterExistingConnection(t *testing.T) {
 	// pre-provisioned connections so the two terraform states stay consistent.
 	options.Region = existingRegion
 	options.TerraformVars["region"] = existingRegion
-	// options.TerraformVars["existing_brs_instance_crn"] = permanentResources["brs_us_east_crn"]
 	options.TerraformVars["existing_brs_instance_crn"] = existing_brs_instance_crn
 	options.TerraformVars["brs_create_new_connection"] = false
 	options.TerraformVars["source_connection_name"] = terraform.OutputContext(t, context.Background(), existingTerraformOptions, "source_connection_name")
@@ -536,20 +459,14 @@ func TestRunCrossClusterExistingConnection(t *testing.T) {
 		fmt.Sprintf(`module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_protection_policy.protection_policy["%s-continuous-backup"]`, options.Prefix),
 	)
 
-	options.PostApplyHook = func(o *testhelper.TestOptions) error {
-		o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
-		return nil
-	}
+	// TODO(provider-fix): re-enable -refresh=false lines once ibm provider PR #6906 is merged+released.
+	// Same reason as TestRunIKSExample. parallelism=1 is kept unconditionally.
+	// options.PostApplyHook = func(o *testhelper.TestOptions) error {
+	// 	o.TerraformOptions.ExtraArgs.Plan = append(o.TerraformOptions.ExtraArgs.Plan, "-refresh=false")
+	// 	return nil
+	// }
 	options.PreDestroyHook = func(o *testhelper.TestOptions) error {
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.source_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		terraform.RunTerraformCommandContextE(t, context.Background(), o.TerraformOptions, "state", "rm", //nolint:errcheck
-			"module.target_backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_data_source_connection.connection[0]")
-		// Use parallelism=1 on destroy so that IBM cluster worker nodes finish
-		// draining before Terraform attempts to delete the VPC and its subnets.
-		// Without this the VPC destroy races the asynchronous worker-node cleanup
-		// and fails with "VPC is in use" even after the subnet resource is gone.
-		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false", "-parallelism=1")
+		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-parallelism=1")
 		return nil
 	}
 

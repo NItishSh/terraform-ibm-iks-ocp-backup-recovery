@@ -27,7 +27,7 @@ func TestRunIKSClassicExample(t *testing.T) {
 		"prefix":                    "brs-iks-classic",
 		"region":                    region,
 		"resource_group":            resourceGroup,
-		"existing_brs_instance_crn": permanentResources["brs_us_east_crn"].(string),
+		"existing_brs_instance_crn": existing_brs_instance_crn,
 	}
 
 	output, err := options.RunTestConsistency()
@@ -50,7 +50,7 @@ func TestRunOCPClassicExample(t *testing.T) {
 		"prefix":                    "brs-ocp-classic",
 		"region":                    region,
 		"resource_group":            resourceGroup,
-		"existing_brs_instance_crn": permanentResources["brs_us_east_crn"].(string),
+		"existing_brs_instance_crn": existing_brs_instance_crn,
 	}
 
 	output, err := options.RunTestConsistency()

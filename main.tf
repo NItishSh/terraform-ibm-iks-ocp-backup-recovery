@@ -399,6 +399,18 @@ resource "helm_release" "data_source_connector" {
       error_message = "Invalid connection_env_type '${var.connection_env_type}' for kube_type '${var.kube_type}'. When kube_type is 'kubernetes', connection_env_type must be 'kIksVpc' or 'kIksClassic'. When kube_type is 'openshift', connection_env_type must be 'kRoksVpc' or 'kRoksClassic'."
     }
   }
+
+  # Collect pod, event, PVC, and node diagnostics when the Helm install fails.
+  # on_failure = continue ensures this runs even when helm times out or errors,
+  # so the logs are visible in the Terraform output before atomic rolls back.
+  provisioner "local-exec" {
+    on_failure  = continue
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = data.ibm_container_cluster_config.cluster_config.config_file_path
+    }
+    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}'"
+  }
 }
 
 ##############################################################################

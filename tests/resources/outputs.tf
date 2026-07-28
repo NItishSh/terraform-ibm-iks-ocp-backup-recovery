@@ -21,19 +21,3 @@ output "cluster_resource_group_id" {
   value       = module.ocp_base.resource_group_id
   description = "Resource group ID of the workload cluster."
 }
-output "brs_instance_crn" {
-  value       = module.backup_recovery_instance.brs_instance_crn
-  description = "CRN of the Backup and Recovery Service instance."
-}
-
-output "brs_connection_name" {
-  value       = module.backup_recovery_instance.connection_name
-  description = "Name of the Backup and Recovery Service connection."
-  sensitive   = true
-}
-
-output "brs_instance_name" {
-  value       = module.backup_recovery_instance.brs_instance.name
-  description = "Name of the Backup and Recovery Service instance."
-  sensitive   = true
-}
