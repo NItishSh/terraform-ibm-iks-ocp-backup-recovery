@@ -3,14 +3,13 @@
 # Called by the local-exec provisioner on helm_release.data_source_connector
 # with on_failure = continue so output is visible in the Terraform log.
 #
-# Usage: dsc-helm-diagnostics.sh <namespace> <storage_class> [dsc_name]
+# Usage: dsc-helm-diagnostics.sh <namespace> <storage_class>
 # Required env: KUBECONFIG
 
 set -uo pipefail
 
 NS="${1:-ibm-brs-data-source-connector}"
 SC="${2:-}"
-DSC_NAME="${3:-dsc}"
 
 echo "=== DSC HELM INSTALL DIAGNOSTICS (namespace: $NS) ==="
 
@@ -96,27 +95,6 @@ else
   echo "StorageClass '$SC': NOT FOUND — this is likely why the DSC PVC is Pending and Helm timed out."
   echo "Available StorageClasses in this cluster:"
   kubectl get storageclass 2>/dev/null || true
-fi
-
-echo "--- BRS control plane connectivity check ---"
-# The DSC must reach rt.cohesity.com on ports 22 and 443 to complete registration.
-# A timeout here means the worker node has no outbound internet access — check
-# the subnet's public gateway, security group egress rules, and network ACLs.
-# Run from a pod on the same node as dsc-0 to test the actual data-path.
-DSC_NODE=$(kubectl get pod "${DSC_NAME}-0" -n "$NS" -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)
-if [[ -n "$DSC_NODE" ]]; then
-  echo "DSC is scheduled on node: $DSC_NODE"
-  for port in 443 22; do
-    echo ">> Testing rt.cohesity.com:$port from a pod on $DSC_NODE ..."
-    kubectl run --rm -i --restart=Never --overrides="{\"spec\":{\"nodeName\":\"$DSC_NODE\",\"tolerations\":[{\"operator\":\"Exists\"}]}}" \
-      dsc-connectivity-check-$port \
-      --image=busybox:1.36 \
-      -n "$NS" \
-      -- sh -c "nc -zw5 rt.cohesity.com $port && echo 'REACHABLE' || echo 'UNREACHABLE — check public gateway / security group egress / network ACL'" \
-      2>/dev/null || echo "Could not run connectivity check pod (may lack permissions)."
-  done
-else
-  echo "Could not determine DSC node — skipping connectivity check."
 fi
 
 echo "--- Namespace events (sorted by time) ---"

@@ -463,7 +463,7 @@ resource "helm_release" "data_source_connector" {
     environment = {
       KUBECONFIG = data.ibm_container_cluster_config.cluster_config.config_file_path
     }
-    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}' '${local.dsc_storage_class}' '${var.dsc_name}'"
+    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}' '${local.dsc_storage_class}'"
   }
 }
 
