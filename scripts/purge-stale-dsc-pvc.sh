@@ -83,8 +83,8 @@ if [[ "$MODE" == "destroy" ]]; then
 
   kubectl delete pvc -n "$NS" \
     -l "app.kubernetes.io/instance=${DSC_NAME}" \
-    --wait=true --timeout=120s
-  echo "DSC PVCs deleted."
+    --wait=false
+  echo "DSC PVCs delete request sent (not waiting for finalizers — namespace deletion will complete cleanup)."
 
   if [[ -n "$retain_pvs" ]]; then
     echo ""

@@ -205,6 +205,15 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 			// That path differs between Schematics jobs (each runs in a fresh
 			// temp dir), causing a side-effect-free in-place update.
 			"module.protect_cluster.terraform_data.wait_for_dsc_node_ready[0]",
+			// purge_stale_dsc_pvc has registration_token in triggers_replace.
+			// The token rotates by design between Schematics jobs so the resource
+			// shows as [update] (replace) on re-plan. The re-run is a no-op when a
+			// live DSC pod is present (upgrade path guard). Side-effect-free churn.
+			"module.protect_cluster.terraform_data.purge_stale_dsc_pvc",
+			// dsc_immutable_values stores the kubeconfig path in input for its
+			// destroy-time PVC cleanup provisioner. That path differs between
+			// Schematics jobs, causing a side-effect-free in-place update.
+			"module.protect_cluster.terraform_data.dsc_immutable_values",
 		},
 	}
 	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
