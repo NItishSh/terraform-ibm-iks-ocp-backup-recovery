@@ -332,6 +332,61 @@ resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
 }
 
 ##############################################################################
+# Freeze immutable Helm values at first install
+##############################################################################
+
+# volumeClaimTemplate.storageClass (and .name, .storageSize) are immutable
+# StatefulSet fields. The Kubernetes API will reject any helm upgrade that
+# attempts to change them, leaving the release in a failed state.
+#
+# To prevent a change to var.dsc_storage_class from being silently sent to
+# helm upgrade, we store the resolved storage class in this resource's `input`
+# at creation time. `input` is updated in-place (no replacement) when it
+# changes, but because the Helm release reads `self.input.storage_class` via a
+# depends_on relationship — not via triggers_replace — a value change here
+# does NOT cascade into a helm upgrade. The storage class seen by the Helm
+# chart therefore stays frozen at the value used during the initial install.
+#
+# If the storage class genuinely must change, the operator must follow the
+# supported migration workflow: terraform destroy, delete orphaned PVCs/PVs,
+# then terraform apply with the new storage class.
+resource "terraform_data" "dsc_immutable_values" {
+  # Store at creation time; never replaced so the value is frozen for the
+  # lifetime of the Helm release.
+  input = {
+    storage_class   = local.dsc_storage_class
+    namespace       = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    dsc_name        = var.dsc_name
+  }
+
+  lifecycle {
+    # Prevent any change to the input from triggering a replacement — we want
+    # the values frozen for the lifetime of the Helm release.
+    ignore_changes = [input]
+  }
+
+  # DESTROY: delete all DSC PVCs after helm uninstall so the underlying storage
+  # is properly de-provisioned. This provisioner fires after helm_release is
+  # destroyed (helm_release depends_on this resource, so Terraform destroys
+  # helm_release first, then this resource).
+  # - RECLAIMPOLICY=Delete (default ibmc-vpc-block-* classes): PV is removed
+  #   automatically once the PVC is deleted.
+  # - RECLAIMPOLICY=Retain: PV is left behind; the script prints its name so
+  #   the operator can delete it manually with: kubectl delete pv <pv-name>
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = self.input.kubeconfig_path
+    }
+    command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}' destroy"
+  }
+
+  depends_on = [kubernetes_namespace_v1.dsc_namespace]
+}
+
+##############################################################################
 # Purge stale DSC PVCs before Helm install
 ##############################################################################
 
@@ -350,6 +405,9 @@ resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
 #
 # triggers_replace fires when the namespace or registration token changes so a
 # token rotation also ensures a clean volume on the next fresh install.
+#
+# NOTE: destroy-time PVC deletion is handled by the dsc_immutable_values
+# terraform_data resource, which is destroyed after helm_release.
 resource "terraform_data" "purge_stale_dsc_pvc" {
   triggers_replace = {
     # Re-run whenever the namespace or registration token changes so a token
@@ -372,9 +430,7 @@ resource "terraform_data" "purge_stale_dsc_pvc" {
     command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}'"
   }
 
-  depends_on = [
-    kubernetes_namespace_v1.dsc_namespace,
-  ]
+  depends_on = [kubernetes_namespace_v1.dsc_namespace]
 }
 
 ##############################################################################
@@ -428,12 +484,17 @@ resource "helm_release" "data_source_connector" {
         }
       ] : []
       volumeClaimTemplate = {
-        storageClass = local.dsc_storage_class
+        # Read the storage class from the frozen terraform_data resource so
+        # that post-install changes to var.dsc_storage_class are NOT forwarded
+        # to helm upgrade. The Kubernetes API rejects any attempt to change an
+        # immutable StatefulSet volumeClaimTemplate field.
+        storageClass = terraform_data.dsc_immutable_values.input.storage_class
       }
     })
   ]
 
   depends_on = [
+    terraform_data.dsc_immutable_values,
     terraform_data.wait_for_dsc_node_ready,
     terraform_data.purge_stale_dsc_pvc,
     ibm_container_vpc_worker_pool.data_source_connector,
