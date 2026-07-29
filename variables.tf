@@ -46,9 +46,9 @@ variable "kube_type" {
 }
 
 variable "rollback_on_failure" {
-  description = "Flag to automatically rollback the helm chart on installation failure."
+  description = "Enables Helm atomic mode (--atomic) on the Data-Source Connector Helm release. When true, a failed install is automatically rolled back. WARNING: the official DSC documentation explicitly states that helm rollbacks are NOT supported for upgrades — rolling back after an upgrade may corrupt persistent state on the PVC. Set to false (recommended for production) and supervise upgrades manually."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "wait_till" {

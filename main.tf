@@ -196,6 +196,10 @@ locals {
   zones_list    = local.is_vpc && var.create_dsc_worker_pool ? [for zone in data.ibm_container_vpc_worker_pool.pool[0].zones : zone] : []
   base_workers  = local.num_zones > 0 ? floor(var.dsc_replicas / local.num_zones) : 0
   extra_workers = local.num_zones > 0 ? var.dsc_replicas % local.num_zones : 0
+
+  # Resolved storage class for the DSC PVC — used in both the Helm values and
+  # the diagnostics script so the expression is not repeated.
+  dsc_storage_class = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
 }
 
 resource "ibm_container_vpc_worker_pool" "data_source_connector" {
@@ -328,6 +332,52 @@ resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
 }
 
 ##############################################################################
+# Purge stale DSC PVCs before Helm install
+##############################################################################
+
+# Helm and the Kubernetes StatefulSet controller never delete PVCs on
+# helm uninstall or rollback — this is intentional to prevent data loss.
+#
+# For a FRESH INSTALL that previously failed the orphaned PVC holds stale
+# gandalf state and an expired registration token. Re-mounting it on the next
+# install causes an immediate crash (gandalf SIGABRT / is_rigel_config_populated:
+# 0 / HTTP 500 from BRS on every registration retry). This resource clears those
+# orphaned PVCs before each Helm install.
+#
+# For an UPGRADE the PVC holds live production data and must never be deleted.
+# The script guards against this by checking whether a live pod already exists;
+# if one does, it exits immediately without touching anything.
+#
+# triggers_replace fires when the namespace or registration token changes so a
+# token rotation also ensures a clean volume on the next fresh install.
+resource "terraform_data" "purge_stale_dsc_pvc" {
+  triggers_replace = {
+    # Re-run whenever the namespace or registration token changes so a token
+    # rotation also gets a clean PVC.
+    namespace          = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    registration_token = local.registration_token != null ? local.registration_token : ""
+  }
+
+  input = {
+    namespace       = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    dsc_name        = var.dsc_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = self.input.kubeconfig_path
+    }
+    command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}'"
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.dsc_namespace,
+  ]
+}
+
+##############################################################################
 # Data Source Connector Helm Release
 ##############################################################################
 
@@ -341,6 +391,7 @@ resource "helm_release" "data_source_connector" {
   timeout          = var.dsc_helm_timeout
   wait             = true
   atomic           = var.rollback_on_failure
+  cleanup_on_fail  = true
 
   values = [
     yamlencode({
@@ -377,13 +428,14 @@ resource "helm_release" "data_source_connector" {
         }
       ] : []
       volumeClaimTemplate = {
-        storageClass = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
+        storageClass = local.dsc_storage_class
       }
     })
   ]
 
   depends_on = [
     terraform_data.wait_for_dsc_node_ready,
+    terraform_data.purge_stale_dsc_pvc,
     ibm_container_vpc_worker_pool.data_source_connector,
     kubernetes_namespace_v1.dsc_namespace,
     kubernetes_role_binding_v1.anyuid_scc_rolebinding,
@@ -402,14 +454,16 @@ resource "helm_release" "data_source_connector" {
 
   # Collect pod, event, PVC, and node diagnostics when the Helm install fails.
   # on_failure = continue ensures this runs even when helm times out or errors,
-  # so the logs are visible in the Terraform output before atomic rolls back.
+  # so the logs are visible in the Terraform output even if atomic rolls back.
+  # NOTE: atomic (rollback_on_failure) defaults to false per the official DSC
+  # docs — rollback after an upgrade is unsupported and may corrupt PVC state.
   provisioner "local-exec" {
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = data.ibm_container_cluster_config.cluster_config.config_file_path
     }
-    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}'"
+    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}' '${local.dsc_storage_class}' '${var.dsc_name}'"
   }
 }
 
@@ -468,13 +522,28 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 # Source Registration
 ##############################################################################
 
-# Wait for DSC to stabilize after helm installation before source registration
+# Wait for DSC to stabilize after helm installation before source registration.
 resource "time_sleep" "wait_for_dsc_stabilization" {
   depends_on = [helm_release.data_source_connector]
 
   create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
 }
 
+# IMPORTANT — deregistration on destroy vs. temporary scale-down (official DSC docs §11)
+# -----------------------------------------------------------------------------------------
+# This resource's destroy path sends DELETE v2/data-source-connectors/<id> to BRS, which
+# permanently removes the connector's identity from the Cohesity cluster. This is the
+# correct behaviour for a full uninstall (Terraform destroy) where the PVCs are also
+# being deleted.
+#
+# It is NOT correct for a temporary scale-down (kubectl scale statefulset dsc --replicas=0).
+# If you scale down without deleting PVCs, the pods retain their persistent identity and
+# must NOT be deregistered — they will show as "disconnected" in the BRS UI, which is
+# expected, and will reconnect automatically when scaled back up.
+#
+# Because Terraform destroy always deletes both the registration AND the helm release
+# (which triggers namespace + PVC cleanup via purge_stale_dsc_pvc on the next apply),
+# this resource's destroy path is always safe in this module's lifecycle.
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
