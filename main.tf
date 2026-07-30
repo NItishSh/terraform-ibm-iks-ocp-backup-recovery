@@ -335,24 +335,12 @@ resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
 # Freeze immutable Helm values at first install
 ##############################################################################
 
-# volumeClaimTemplate.storageClass (and .name, .storageSize) are immutable
-# StatefulSet fields. The Kubernetes API will reject any helm upgrade that
-# attempts to change them, leaving the release in a failed state.
-#
-# To prevent a change to var.dsc_storage_class from being silently sent to
-# helm upgrade, we store the resolved storage class in this resource's `input`
-# at creation time. `input` is updated in-place (no replacement) when it
-# changes, but because the Helm release reads `self.input.storage_class` via a
-# depends_on relationship — not via triggers_replace — a value change here
-# does NOT cascade into a helm upgrade. The storage class seen by the Helm
-# chart therefore stays frozen at the value used during the initial install.
-#
-# If the storage class genuinely must change, the operator must follow the
-# supported migration workflow: terraform destroy, delete orphaned PVCs/PVs,
-# then terraform apply with the new storage class.
+# volumeClaimTemplate.storageClass is an immutable StatefulSet field —
+# the Kubernetes API rejects any helm upgrade that changes it.
+# Storing it in input under ignore_changes freezes the value at first apply
+# so post-install changes to var.dsc_storage_class never reach helm upgrade.
+# To change it: terraform destroy, clean up PVCs/PVs, then terraform apply.
 resource "terraform_data" "dsc_immutable_values" {
-  # Store at creation time; never replaced so the value is frozen for the
-  # lifetime of the Helm release.
   input = {
     storage_class   = local.dsc_storage_class
     namespace       = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
@@ -361,19 +349,12 @@ resource "terraform_data" "dsc_immutable_values" {
   }
 
   lifecycle {
-    # Prevent any change to the input from triggering a replacement — we want
-    # the values frozen for the lifetime of the Helm release.
     ignore_changes = [input]
   }
 
-  # DESTROY: delete all DSC PVCs after helm uninstall so the underlying storage
-  # is properly de-provisioned. This provisioner fires after helm_release is
-  # destroyed (helm_release depends_on this resource, so Terraform destroys
-  # helm_release first, then this resource).
-  # - RECLAIMPOLICY=Delete (default ibmc-vpc-block-* classes): PV is removed
-  #   automatically once the PVC is deleted.
-  # - RECLAIMPOLICY=Retain: PV is left behind; the script prints its name so
-  #   the operator can delete it manually with: kubectl delete pv <pv-name>
+  # On destroy: delete DSC PVCs after helm uninstall (helm_release depends_on
+  # this resource, so it is destroyed first). RECLAIMPOLICY=Retain PVs are
+  # printed for manual deletion; Delete-policy PVs are removed automatically.
   provisioner "local-exec" {
     when        = destroy
     interpreter = ["/bin/bash", "-c"]
@@ -390,28 +371,12 @@ resource "terraform_data" "dsc_immutable_values" {
 # Purge stale DSC PVCs before Helm install
 ##############################################################################
 
-# Helm and the Kubernetes StatefulSet controller never delete PVCs on
-# helm uninstall or rollback — this is intentional to prevent data loss.
-#
-# For a FRESH INSTALL that previously failed the orphaned PVC holds stale
-# gandalf state and an expired registration token. Re-mounting it on the next
-# install causes an immediate crash (gandalf SIGABRT / is_rigel_config_populated:
-# 0 / HTTP 500 from BRS on every registration retry). This resource clears those
-# orphaned PVCs before each Helm install.
-#
-# For an UPGRADE the PVC holds live production data and must never be deleted.
-# The script guards against this by checking whether a live pod already exists;
-# if one does, it exits immediately without touching anything.
-#
-# triggers_replace fires when the namespace or registration token changes so a
-# token rotation also ensures a clean volume on the next fresh install.
-#
-# NOTE: destroy-time PVC deletion is handled by the dsc_immutable_values
-# terraform_data resource, which is destroyed after helm_release.
+# Orphaned PVCs from a failed install hold stale gandalf state and an expired
+# token; re-mounting them crashes the DSC immediately. The script deletes them
+# only when no live pod exists — upgrades are safe. Destroy-time PVC cleanup
+# is handled by dsc_immutable_values (destroyed after helm_release).
 resource "terraform_data" "purge_stale_dsc_pvc" {
   triggers_replace = {
-    # Re-run whenever the namespace or registration token changes so a token
-    # rotation also gets a clean PVC.
     namespace          = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
     registration_token = local.registration_token != null ? local.registration_token : ""
   }
@@ -484,10 +449,7 @@ resource "helm_release" "data_source_connector" {
         }
       ] : []
       volumeClaimTemplate = {
-        # Read the storage class from the frozen terraform_data resource so
-        # that post-install changes to var.dsc_storage_class are NOT forwarded
-        # to helm upgrade. The Kubernetes API rejects any attempt to change an
-        # immutable StatefulSet volumeClaimTemplate field.
+        # Frozen at first apply — see dsc_immutable_values.
         storageClass = terraform_data.dsc_immutable_values.input.storage_class
       }
     })
@@ -590,21 +552,12 @@ resource "time_sleep" "wait_for_dsc_stabilization" {
   create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
 }
 
-# IMPORTANT — deregistration on destroy vs. temporary scale-down (official DSC docs section 11)
-# -----------------------------------------------------------------------------------------
-# This resource's destroy path sends DELETE v2/data-source-connectors/<id> to BRS, which
-# permanently removes the connector's identity from the Cohesity cluster. This is the
-# correct behaviour for a full uninstall (Terraform destroy) where the PVCs are also
-# being deleted.
-#
-# It is NOT correct for a temporary scale-down (kubectl scale statefulset dsc --replicas=0).
-# If you scale down without deleting PVCs, the pods retain their persistent identity and
-# must NOT be deregistered — they will show as "disconnected" in the BRS UI, which is
-# expected, and will reconnect automatically when scaled back up.
-#
-# Because Terraform destroy always deletes both the registration AND the helm release
-# (which triggers namespace + PVC cleanup via purge_stale_dsc_pvc on the next apply),
-# this resource's destroy path is always safe in this module's lifecycle.
+# On destroy this sends DELETE to BRS, permanently removing the connector identity.
+# Correct for a full terraform destroy (PVCs also deleted).
+# NOT correct for a temporary scale-down (kubectl scale ... --replicas=0): pods
+# retain their identity and reconnect automatically when scaled back up — do not
+# deregister. Because terraform destroy always deletes PVCs too, the destroy path
+# here is always safe.
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
