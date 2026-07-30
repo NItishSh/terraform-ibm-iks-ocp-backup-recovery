@@ -590,7 +590,7 @@ resource "time_sleep" "wait_for_dsc_stabilization" {
   create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
 }
 
-# IMPORTANT — deregistration on destroy vs. temporary scale-down (official DSC docs §11)
+# IMPORTANT — deregistration on destroy vs. temporary scale-down (official DSC docs section 11)
 # -----------------------------------------------------------------------------------------
 # This resource's destroy path sends DELETE v2/data-source-connectors/<id> to BRS, which
 # permanently removes the connector's identity from the Cohesity cluster. This is the
