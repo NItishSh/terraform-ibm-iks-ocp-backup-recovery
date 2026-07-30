@@ -87,7 +87,6 @@ module "protect_cluster" {
   dsc_pod_memory_limits   = var.dsc_pod_memory_limits
   dsc_pod_cpu_requests    = var.dsc_pod_cpu_requests
   dsc_pod_memory_requests = var.dsc_pod_memory_requests
-  rollback_on_failure     = var.rollback_on_failure
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
@@ -197,7 +196,6 @@ module "target_cluster_registration" {
   dsc_helm_timeout       = var.dsc_helm_timeout
   dsc_storage_class      = var.dsc_storage_class
   create_dsc_worker_pool = var.target_create_dsc_worker_pool
-  rollback_on_failure    = var.rollback_on_failure
 
   # Registration settings
   registration_images = var.registration_images

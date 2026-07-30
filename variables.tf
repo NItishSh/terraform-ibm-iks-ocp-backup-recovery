@@ -45,11 +45,8 @@ variable "kube_type" {
   }
 }
 
-variable "rollback_on_failure" {
-  description = "Enables Helm atomic mode (--atomic) on the Data-Source Connector Helm release. When true, a failed install is automatically rolled back. WARNING: the official DSC documentation explicitly states that helm rollbacks are NOT supported for upgrades — rolling back after an upgrade may corrupt persistent state on the PVC. Set to false (recommended for production) and supervise upgrades manually."
-  type        = bool
-  default     = false
-}
+# rollback_on_failure intentionally removed — DSC docs §8 explicitly forbid
+# helm rollbacks; atomic mode is hard-coded to false in the helm_release resource.
 
 variable "wait_till" {
   description = "To avoid long wait times when you run your Terraform code, you can specify the stage when you want Terraform to mark the cluster resource creation as completed. Depending on what stage you choose, the cluster creation might not be fully completed and continues to run in the background. However, your Terraform code can continue to run without waiting for the cluster to be fully created. Supported args are `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` and `Normal`"

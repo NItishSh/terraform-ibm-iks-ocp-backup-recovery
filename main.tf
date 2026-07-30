@@ -307,30 +307,6 @@ resource "kubernetes_namespace_v1" "dsc_namespace" {
   }
 }
 
-# On OpenShift (ROKS), grant anyuid SCC to all service accounts in the DSC
-# namespace so that DSC pods can run with the UID specified in their image.
-# Uses the typed kubernetes_role_binding_v1 resource (not kubernetes_manifest)
-# because kubernetes_manifest requires a live cluster API connection at plan
-# time, which is not available when the cluster is created in the same apply.
-resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
-  count = var.kube_type == "openshift" ? 1 : 0
-
-  metadata {
-    name      = "dsc-anyuid-scc"
-    namespace = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "system:openshift:scc:anyuid"
-  }
-  subject {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "Group"
-    name      = "system:serviceaccounts:${kubernetes_namespace_v1.dsc_namespace.metadata[0].name}"
-  }
-}
-
 ##############################################################################
 # Freeze immutable Helm values at first install
 ##############################################################################
@@ -411,7 +387,7 @@ resource "helm_release" "data_source_connector" {
   create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
-  atomic           = var.rollback_on_failure
+  atomic           = false # DSC docs §8: rollbacks are unsupported and can corrupt PVC state.
   cleanup_on_fail  = true
 
   values = [
@@ -461,7 +437,6 @@ resource "helm_release" "data_source_connector" {
     terraform_data.purge_stale_dsc_pvc,
     ibm_container_vpc_worker_pool.data_source_connector,
     kubernetes_namespace_v1.dsc_namespace,
-    kubernetes_role_binding_v1.anyuid_scc_rolebinding,
   ]
 
   lifecycle {
@@ -476,10 +451,7 @@ resource "helm_release" "data_source_connector" {
   }
 
   # Collect pod, event, PVC, and node diagnostics when the Helm install fails.
-  # on_failure = continue ensures this runs even when helm times out or errors,
-  # so the logs are visible in the Terraform output even if atomic rolls back.
-  # NOTE: atomic (rollback_on_failure) defaults to false per the official DSC
-  # docs — rollback after an upgrade is unsupported and may corrupt PVC state.
+  # on_failure = continue ensures output is visible even when helm times out.
   provisioner "local-exec" {
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]

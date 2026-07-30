@@ -383,11 +383,6 @@ variable "dsc_image_version" {
     error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<tag>@sha256:<64-hex-digest>'."
   }
 }
-variable "rollback_on_failure" {
-  description = "Enables Helm atomic mode (--atomic) on the Data-Source Connector Helm release. When true, a failed install is automatically rolled back. WARNING: the official DSC documentation explicitly states that helm rollbacks are NOT supported for upgrades — rolling back after an upgrade may corrupt persistent state on the PVC. Set to false (recommended for production) and supervise upgrades manually."
-  type        = bool
-  default     = false
-}
 variable "brs_connection_name" {
   type        = string
   description = "Name of the connection from the Backup & Recovery Service instance to be used for protecting the cluster. If `brs_create_new_connection` is set to `true` (default), this will be the name of the new connection created. If set to `false`, this must be the name of an existing connection."

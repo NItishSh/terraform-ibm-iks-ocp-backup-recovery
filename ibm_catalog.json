@@ -222,10 +222,6 @@
               "display_name": "DSC Image Version"
             },
             {
-              "key": "rollback_on_failure",
-              "display_name": "Rollback On Failure"
-            },
-            {
               "key": "existing_brs_instance_crn",
               "display_name": "Backup Recovery Service Instance",
               "type": "string",
