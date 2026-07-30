@@ -75,7 +75,6 @@ module "protect_cluster" {
   wait_till_timeout        = var.wait_till_timeout
   # --- Data Source Connector (DSC) ---
   dsc_chart_uri           = var.dsc_chart_uri
-  dsc_image_version       = var.dsc_image_version
   dsc_name                = var.dsc_name
   dsc_replicas            = var.dsc_replicas
   dsc_namespace           = var.dsc_namespace
@@ -189,7 +188,6 @@ module "target_cluster_registration" {
 
   # DSC configuration for target
   dsc_chart_uri          = var.dsc_chart_uri
-  dsc_image_version      = var.dsc_image_version
   dsc_name               = var.dsc_name
   dsc_replicas           = var.dsc_replicas
   dsc_namespace          = var.dsc_namespace

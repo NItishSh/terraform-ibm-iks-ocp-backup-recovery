@@ -95,19 +95,6 @@ variable "dsc_chart_uri" {
   nullable    = false
 }
 
-variable "dsc_image_version" {
-  description = "Container image for the Data Source Connector."
-  type        = string
-  default     = "icr.io/ext/brs/brs-ds-connector:7.3.12-release-20260713-2e7241a2@sha256:01b4fb26764c854a141c1e3dfb3be5c1b2dc6dda397f6532fc3c84136ca0698d"
-
-  validation {
-    condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
-    error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<tag>@sha256:<64-hex-digest>'."
-  }
-
-  nullable = false
-}
-
 variable "dsc_name" {
   description = "Release name for the Data Source Connector Helm deployment."
   type        = string

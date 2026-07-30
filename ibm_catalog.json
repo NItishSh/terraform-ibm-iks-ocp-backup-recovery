@@ -218,10 +218,6 @@
               "display_name": "DSC Replicas"
             },
             {
-              "key": "dsc_image_version",
-              "display_name": "DSC Image Version"
-            },
-            {
               "key": "existing_brs_instance_crn",
               "display_name": "Backup Recovery Service Instance",
               "type": "string",

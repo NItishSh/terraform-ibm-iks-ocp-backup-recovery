@@ -395,12 +395,9 @@ resource "helm_release" "data_source_connector" {
       secrets = {
         registrationToken = local.registration_token != null ? local.registration_token : ""
       }
-      image = {
-        registry   = element(split("/", var.dsc_image_version), 0)
-        namespace  = element(split("/", var.dsc_image_version), 1)
-        repository = "${element(split("/", var.dsc_image_version), 2)}/${element(split("/", split(":", var.dsc_image_version)[0]), 3)}"
-        tag        = split("@", split(":", var.dsc_image_version)[1])[0]
-      }
+      # image.tag is intentionally omitted — the chart uses its AppVersion as the
+      # default tag, which is pinned to the chart version in dsc_chart_uri.
+      # DSC docs §6.1: "image.tag need not be supplied during helm install/upgrade".
       replicaCount     = var.dsc_replicas
       fullnameOverride = var.dsc_name
       resources = {
@@ -634,7 +631,7 @@ resource "time_sleep" "wait_for_source_discovery" {
 
   triggers = {
     connection_id = local.connection_id
-    dsc_version   = var.dsc_image_version
+    dsc_version   = var.dsc_chart_uri
   }
 
   create_duration = "10m"
