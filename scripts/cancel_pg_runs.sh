@@ -76,17 +76,29 @@ is_terminal() {
   esac
 }
 
-cancel_active_runs() {
+# Returns 0 (active) if any run or archival task is non-terminal.
+# Populates global ACTIVE_RUN_IDS and ACTIVE_ARCHIVAL_IDS for use by callers.
+ACTIVE_RUN_IDS=()
+ACTIVE_ARCHIVAL_PAIRS=()  # each entry is "runId archivalTaskId" (archivalTaskId is the GET response field)
+
+check_active_runs() {
   local run_data
   run_data=$(call_api "GET" "/v2/data-protect/protection-groups/${API_PG_ID}/runs?includeObjectDetails=false&numRuns=10" || echo '{"runs":[]}')
 
-  local total_runs active_found
-  total_runs=$(echo "$run_data" | jq '.runs | length')
-  active_found=0
+  ACTIVE_RUN_IDS=()
+  ACTIVE_ARCHIVAL_PAIRS=()
+
+  local total_runs
+  total_runs=$(echo "$run_data" | jq '.runs | length // 0')
 
   echo "Total runs returned by API: ${total_runs}" >&2
 
-  for i in $(seq 0 $(( total_runs - 1 ))); do
+  if [[ "$total_runs" -eq 0 ]]; then
+    return 1  # no active runs
+  fi
+
+  local i
+  for (( i = 0; i < total_runs; i++ )); do
     local run_id run_status
     run_id=$(echo "$run_data" | jq -r ".runs[${i}].id // empty")
     run_status=$(echo "$run_data" | jq -r ".runs[${i}].status // empty")
@@ -97,68 +109,73 @@ cancel_active_runs() {
       continue
     fi
 
-    # Cancel the entire run if it is not in a terminal state
+    # Track non-terminal runs for cancel
     if ! is_terminal "$run_status"; then
-      echo "  -> Non-terminal run status '${run_status}'. Sending cancel for run ${run_id}..." >&2
-      active_found=$(( active_found + 1 ))
-      call_api "POST" "/v2/data-protect/protection-groups/${API_PG_ID}/runs/actions" \
-        --data-raw "{\"action\": \"Cancel\", \"cancelParams\": [{\"runId\": \"${run_id}\"}]}" > /dev/null \
-        || echo "  -> Cancel request may have failed, continuing..." >&2
+      echo "  -> Non-terminal run status '${run_status}'" >&2
+      ACTIVE_RUN_IDS+=("$run_id")
     fi
 
-    # Even for terminal runs, copy (archival) tasks may still be active and will
-    # block protection group deletion.  Cancel each non-terminal archival task.
+    # Check archival tasks regardless of main run status — an archival task
+    # can remain active even after the main backup completes (Succeeded).
     local num_archival
     num_archival=$(echo "$run_data" | jq ".runs[${i}].archivalInfo.archivalTargetResults | length // 0")
 
-    for j in $(seq 0 $(( num_archival - 1 ))); do
-      local archival_status archival_task_id
-      archival_status=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].status // empty")
-      archival_task_id=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].archivalTaskId // empty")
+    if [[ "$num_archival" -gt 0 ]]; then
+      local j
+      for (( j = 0; j < num_archival; j++ )); do
+        local archival_status archival_task_id
+        archival_status=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].status // empty")
+        archival_task_id=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].archivalTaskId // empty")
 
-      echo "  Copy task[${j}]: status=${archival_status:-<none>}, taskId=${archival_task_id:-<none>}" >&2
+        echo "  Copy task[${j}]: status=${archival_status:-<none>}, taskId=${archival_task_id:-<none>}" >&2
 
-      if [[ -n "$archival_status" ]] && ! is_terminal "$archival_status" && [[ -n "$archival_task_id" ]]; then
-        echo "  -> Active copy task '${archival_status}'. Sending cancel for archival task ${archival_task_id}..." >&2
-        active_found=$(( active_found + 1 ))
-        call_api "POST" "/v2/data-protect/protection-groups/${API_PG_ID}/runs/actions" \
-          --data-raw "{\"action\": \"Cancel\", \"cancelParams\": [{\"runId\": \"${run_id}\", \"archivalTaskId\": \"${archival_task_id}\"}]}" > /dev/null \
-          || echo "  -> Archival cancel request may have failed, continuing..." >&2
-      fi
-    done
+        if [[ -n "$archival_status" ]] && ! is_terminal "$archival_status" && [[ -n "$archival_task_id" ]]; then
+          echo "  -> Active copy task '${archival_status}'" >&2
+          ACTIVE_ARCHIVAL_PAIRS+=("${run_id} ${archival_task_id}")
+        fi
+      done
+    fi
+  done
+
+  if [[ "${#ACTIVE_RUN_IDS[@]}" -gt 0 || "${#ACTIVE_ARCHIVAL_PAIRS[@]}" -gt 0 ]]; then
+    return 0  # has active work
+  fi
+  return 1  # all terminal
+}
+
+cancel_active_runs() {
+  check_active_runs || true  # populate arrays; return code used by has_active_runs, not here
+
+  local active_found
+  active_found=$(( ${#ACTIVE_RUN_IDS[@]} + ${#ACTIVE_ARCHIVAL_PAIRS[@]} ))
+
+  # Cancel non-terminal runs
+  local run_id
+  for run_id in "${ACTIVE_RUN_IDS[@]}"; do
+    echo "  -> Sending cancel for run ${run_id}..." >&2
+    call_api "POST" "/v2/data-protect/protection-groups/${API_PG_ID}/runs/actions" \
+      --data-raw "{\"action\": \"Cancel\", \"cancelParams\": [{\"runId\": \"${run_id}\"}]}" > /dev/null \
+      || echo "  -> Cancel request may have failed, continuing..." >&2
+  done
+
+  # Cancel active archival tasks
+  local pair
+  for pair in "${ACTIVE_ARCHIVAL_PAIRS[@]}"; do
+    local r_id a_id
+    r_id="${pair%% *}"
+    a_id="${pair##* }"
+    echo "  -> Sending cancel for archival task ${a_id} (run ${r_id})..." >&2
+    # archivalTaskId in cancelParams is an array per the BRS API schema.
+    call_api "POST" "/v2/data-protect/protection-groups/${API_PG_ID}/runs/actions" \
+      --data-raw "{\"action\": \"Cancel\", \"cancelParams\": [{\"runId\": \"${r_id}\", \"archivalTaskId\": [\"${a_id}\"]}]}" > /dev/null \
+      || echo "  -> Archival cancel request may have failed, continuing..." >&2
   done
 
   echo "$active_found"
 }
 
 has_active_runs() {
-  local run_data
-  run_data=$(call_api "GET" "/v2/data-protect/protection-groups/${API_PG_ID}/runs?includeObjectDetails=false&numRuns=10" || echo '{"runs":[]}')
-
-  local total_runs
-  total_runs=$(echo "$run_data" | jq '.runs | length')
-
-  for i in $(seq 0 $(( total_runs - 1 ))); do
-    local run_status
-    run_status=$(echo "$run_data" | jq -r ".runs[${i}].status // empty")
-    if [[ -n "$run_status" ]] && ! is_terminal "$run_status"; then
-      echo "Still active: run[${i}] status=${run_status}" >&2
-      return 0  # has active run
-    fi
-
-    # Also check whether any copy (archival) tasks are still running
-    local num_archival
-    num_archival=$(echo "$run_data" | jq ".runs[${i}].archivalInfo.archivalTargetResults | length // 0")
-    for j in $(seq 0 $(( num_archival - 1 ))); do
-      local archival_status
-      archival_status=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].status // empty")
-      if [[ -n "$archival_status" ]] && ! is_terminal "$archival_status"; then
-        echo "Still active: run[${i}] copy task[${j}] status=${archival_status}" >&2
-        return 0  # has active copy task
-      fi
-    done
-  done
-  return 1  # no active runs or copy tasks
+  check_active_runs
 }
 
 pause_protection_group() {
@@ -203,14 +220,14 @@ main() {
   fi
 
   # Wait for all active runs to reach a terminal state.
-  # Timeout is 30 minutes — backup jobs can take 15–20 min to cancel when
-  # archival (CloudArchiveDirect) tasks are in flight.
-  echo "Waiting for ${active_count} active run(s) to stop (timeout 30m)..."
+  # Timeout is 60 minutes — archival (CloudArchiveDirect) tasks can take
+  # 30+ minutes to cancel when mid-upload to cloud storage.
+  echo "Waiting for ${active_count} active run(s) to stop (timeout 60m)..."
   local timeout_at
-  timeout_at=$(( $(date +%s) + 1800 ))
+  timeout_at=$(( $(date +%s) + 3600 ))
 
   while [[ "$(date +%s)" -lt "$timeout_at" ]]; do
-    sleep 30
+    sleep 20
     echo "Re-checking run states..."
     if ! has_active_runs; then
       echo "All runs stopped. Waiting 30s for BRS to commit final state..."
@@ -226,8 +243,10 @@ main() {
     cancel_active_runs > /dev/null
   done
 
-  echo "WARNING: Timed out (30 min) waiting for run cancellation. Proceeding anyway." >&2
-  exit 0
+  echo "ERROR: Timed out (60 min) waiting for run cancellation to complete." >&2
+  echo "Active runs/tasks are still present. Protection group cannot be safely deleted." >&2
+  echo "Investigate BRS job state for protection group ${API_PG_ID} and retry." >&2
+  exit 1
 }
 
 main
