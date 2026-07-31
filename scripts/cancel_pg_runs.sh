@@ -47,166 +47,163 @@ ibmcloud_login() {
 }
 
 # ---------------------------------------------------------------------------
-# Helpers — thin wrappers around the CLI, output is raw JSON (--output json)
+# Pause the protection group to block new runs.
+#
+# 'protection-group update' requires --name, --policy-id, and --environment
+# even when only changing --is-paused. We GET the group first to extract
+# those required fields, then issue the update.
 # ---------------------------------------------------------------------------
-
-pg_run_list() {
-  ibmcloud backup-recovery protection-group-run list \
+pg_pause() {
+  local pg_json
+  pg_json=$(ibmcloud backup-recovery protection-group get \
     --id "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
-    --num-runs 10 \
-    --include-object-details=false \
-    --output json \
-    -q 2>/dev/null \
-    || echo '{"runs":[]}'
-}
+    --output json -q 2>/dev/null) || {
+    echo "Could not fetch protection group details; skipping pause." >&2
+    return 0
+  }
 
-pg_run_cancel() {
-  local cancel_params_json=$1
-  ibmcloud backup-recovery protection-group-run perform-action \
-    --id "${API_PG_ID}" \
-    --xibm-tenant-id "${TENANT}" \
-    --action Cancel \
-    --cancel-params "${cancel_params_json}" \
-    -q 2>/dev/null
-}
+  local pg_name pg_policy_id pg_env
+  pg_name=$(echo    "$pg_json" | jq -r '.name        // empty')
+  pg_policy_id=$(echo "$pg_json" | jq -r '.policyId  // empty')
+  pg_env=$(echo     "$pg_json" | jq -r '.environment // empty')
 
-pg_update_pause() {
+  if [[ -z "$pg_name" || -z "$pg_policy_id" || -z "$pg_env" ]]; then
+    echo "Could not extract required PG fields (name/policyId/environment); skipping pause." >&2
+    return 0
+  fi
+
   ibmcloud backup-recovery protection-group update \
-    --id "${API_PG_ID}" \
+    --id          "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
+    --name        "${pg_name}" \
+    --policy-id   "${pg_policy_id}" \
+    --environment "${pg_env}" \
     --is-paused=true \
     -q 2>/dev/null \
     || echo "Pause request failed; continuing anyway..." >&2
 }
 
 # ---------------------------------------------------------------------------
-# is_terminal: returns 0 if status is a known done/stopped state
+# Run-state queries — two targeted calls using server-side status filters:
+#
+#   pg_active_backup_runs  — local backup phase is non-terminal
+#   pg_active_archival_runs — archival phase is non-terminal
+#
+# Using separate targeted list calls per phase (--local-backup-run-status /
+# --archival-run-status) is more accurate than fetching all runs and
+# filtering client-side: BRS only returns runs that match, so we never
+# confuse a Succeeded backup run for an active one just because it still
+# has an active archival task.
 # ---------------------------------------------------------------------------
-is_terminal() {
-  local status=$1
-  case "$status" in
-    Succeeded | Failed | Canceled | Skipped | Missed | SucceededWithWarning | \
-    kSucceeded | kFailed | kCanceled | kSkipped | kMissed | kSucceededWithWarning)
-      return 0 ;;
-    *) return 1 ;;
-  esac
+
+# Non-terminal local-backup statuses
+ACTIVE_STATUSES="Accepted,Running,Canceling,OnHold,Finalizing"
+
+pg_active_backup_runs() {
+  ibmcloud backup-recovery protection-group-run list \
+    --id "${API_PG_ID}" \
+    --xibm-tenant-id "${TENANT}" \
+    --local-backup-run-status "${ACTIVE_STATUSES}" \
+    --num-runs 10 \
+    --include-object-details=false \
+    --output json -q 2>/dev/null \
+    || echo '{"runs":[]}'
+}
+
+pg_active_archival_runs() {
+  ibmcloud backup-recovery protection-group-run list \
+    --id "${API_PG_ID}" \
+    --xibm-tenant-id "${TENANT}" \
+    --archival-run-status "${ACTIVE_STATUSES}" \
+    --num-runs 10 \
+    --include-object-details=false \
+    --output json -q 2>/dev/null \
+    || echo '{"runs":[]}'
 }
 
 # ---------------------------------------------------------------------------
-# check_active_runs: populate ACTIVE_RUN_IDS and ACTIVE_ARCHIVAL_PAIRS
-# Returns 0 if any active work exists, 1 if everything is terminal.
+# check_and_cancel: single pass — detect active work and issue cancels.
+#
+# Uses a single jq expression per response to extract all relevant IDs at
+# once (avoids one jq fork per run/task in a loop).
+#
+# Returns the total count of active items found (via stdout).
+# All diagnostic output goes to stderr.
 # ---------------------------------------------------------------------------
-ACTIVE_RUN_IDS=()
-ACTIVE_ARCHIVAL_PAIRS=()  # each entry: "runId archivalTaskId"
+check_and_cancel() {
+  local active_found=0
 
-check_active_runs() {
-  local run_data
-  run_data=$(pg_run_list)
+  # --- Phase 1: non-terminal backup runs ---
+  local backup_data run_ids
+  backup_data=$(pg_active_backup_runs)
+  # Extract all run IDs in one jq call
+  run_ids=$(echo "$backup_data" | jq -r '[.runs[].id // empty] | .[]')
 
-  ACTIVE_RUN_IDS=()
-  ACTIVE_ARCHIVAL_PAIRS=()
-
-  local total_runs
-  total_runs=$(echo "$run_data" | jq '.runs | length // 0')
-  echo "Total runs returned: ${total_runs}" >&2
-
-  if [[ "$total_runs" -eq 0 ]]; then
-    return 1
+  if [[ -n "$run_ids" ]]; then
+    while IFS= read -r run_id; do
+      [[ -z "$run_id" ]] && continue
+      local run_status
+      run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
+        '.runs[] | select(.id == $id) | .status // "<unknown>"')
+      echo "  Backup run ${run_id}: status=${run_status} → cancelling..." >&2
+      ibmcloud backup-recovery protection-group-run perform-action \
+        --id "${API_PG_ID}" \
+        --xibm-tenant-id "${TENANT}" \
+        --action Cancel \
+        --cancel-params "[{\"runId\": \"${run_id}\"}]" \
+        -q 2>/dev/null \
+        || echo "  Cancel request may have failed, continuing..." >&2
+      active_found=$(( active_found + 1 ))
+    done <<< "$run_ids"
   fi
 
-  local i
-  for (( i = 0; i < total_runs; i++ )); do
-    local run_id run_status
-    run_id=$(echo "$run_data" | jq -r ".runs[${i}].id // empty")
-    run_status=$(echo "$run_data" | jq -r ".runs[${i}].status // empty")
+  # --- Phase 2: non-terminal archival tasks ---
+  # A run's archival task may be active even when the backup phase is terminal.
+  # We fetch separately using --archival-run-status so we don't miss them.
+  local archival_data pairs
+  archival_data=$(pg_active_archival_runs)
+  # Single jq call: emit "runId archivalTaskId" lines for all active tasks
+  pairs=$(echo "$archival_data" | jq -r '
+    .runs[] |
+    .id as $rid |
+    .archivalInfo.archivalTargetResults[]? |
+    select(.archivalTaskId != null and .archivalTaskId != "") |
+    "\($rid) \(.archivalTaskId)"
+  ')
 
-    echo "Run[${i}]: id=${run_id:-<none>}, status=${run_status:-<none>}" >&2
-    [[ -z "$run_id" ]] && continue
-
-    if ! is_terminal "$run_status"; then
-      echo "  -> Non-terminal run status '${run_status}'" >&2
-      ACTIVE_RUN_IDS+=("$run_id")
-    fi
-
-    # Check archival tasks regardless of main run status — an archival task
-    # can remain active even after the main backup phase completes (Succeeded).
-    local num_archival
-    num_archival=$(echo "$run_data" | jq ".runs[${i}].archivalInfo.archivalTargetResults | length // 0")
-
-    if [[ "$num_archival" -gt 0 ]]; then
-      local j
-      for (( j = 0; j < num_archival; j++ )); do
-        local archival_status archival_task_id
-        archival_status=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].status // empty")
-        archival_task_id=$(echo "$run_data" | jq -r ".runs[${i}].archivalInfo.archivalTargetResults[${j}].archivalTaskId // empty")
-
-        echo "  Copy task[${j}]: status=${archival_status:-<none>}, taskId=${archival_task_id:-<none>}" >&2
-
-        if [[ -n "$archival_status" ]] && ! is_terminal "$archival_status" && [[ -n "$archival_task_id" ]]; then
-          echo "  -> Active copy task '${archival_status}'" >&2
-          ACTIVE_ARCHIVAL_PAIRS+=("${run_id} ${archival_task_id}")
-        fi
-      done
-    fi
-  done
-
-  if [[ "${#ACTIVE_RUN_IDS[@]}" -gt 0 || "${#ACTIVE_ARCHIVAL_PAIRS[@]}" -gt 0 ]]; then
-    return 0
+  if [[ -n "$pairs" ]]; then
+    while IFS=" " read -r r_id a_id; do
+      [[ -z "$r_id" || -z "$a_id" ]] && continue
+      local a_status
+      a_status=$(echo "$archival_data" | jq -r --arg rid "$r_id" --arg aid "$a_id" '
+        .runs[] | select(.id == $rid) |
+        .archivalInfo.archivalTargetResults[] |
+        select(.archivalTaskId == $aid) | .status // "<unknown>"')
+      echo "  Archival task ${a_id} (run ${r_id}): status=${a_status} → cancelling..." >&2
+      # archivalTaskId must be passed as a JSON array per the BRS API schema
+      ibmcloud backup-recovery protection-group-run perform-action \
+        --id "${API_PG_ID}" \
+        --xibm-tenant-id "${TENANT}" \
+        --action Cancel \
+        --cancel-params "[{\"runId\": \"${r_id}\", \"archivalTaskId\": [\"${a_id}\"]}]" \
+        -q 2>/dev/null \
+        || echo "  Archival cancel request may have failed, continuing..." >&2
+      active_found=$(( active_found + 1 ))
+    done <<< "$pairs"
   fi
-  return 1
-}
-
-# cancel_active_runs:  send cancels for whatever is currently active, then
-# return the count of active items found.
-#
-# Backup and archival phases are sequential, not simultaneous:
-#
-#   Phase 1 — Backup  (run.status = Running)
-#     → cancel run-level: {"runId": "..."}
-#     → BRS stops the backup.  Archival may or may not start afterward.
-#
-#   Phase 2 — Archival  (archivalTargetResults[i].status = Running)
-#     The archival task may not exist yet when we first call this function.
-#     It is caught on the *next poll iteration* once it surfaces in the API.
-#     → cancel archival-level: {"runId": "...", "archivalTaskId": ["..."]}
-#
-# Because this function is called in a loop (every 20 s), a run-level cancel
-# on an already-Succeeded run is harmless (BRS ignores it), and archival tasks
-# that appear after the backup phase ends will be picked up automatically.
-cancel_active_runs() {
-  check_active_runs || true
-
-  local active_found
-  active_found=$(( ${#ACTIVE_RUN_IDS[@]} + ${#ACTIVE_ARCHIVAL_PAIRS[@]} ))
-
-  # Phase 1: cancel any non-terminal backup run
-  local run_id
-  for run_id in "${ACTIVE_RUN_IDS[@]}"; do
-    echo "  -> Cancelling backup run ${run_id}..." >&2
-    pg_run_cancel "[{\"runId\": \"${run_id}\"}]" > /dev/null \
-      || echo "  -> Cancel request may have failed, continuing..." >&2
-  done
-
-  # Phase 2: cancel any non-terminal archival task.
-  # archivalTaskId is an array per the BRS API schema.
-  # If the archival phase hasn't started yet this array will be empty and
-  # the loop body won't execute; it will be populated on the next poll.
-  local pair
-  for pair in "${ACTIVE_ARCHIVAL_PAIRS[@]}"; do
-    local r_id a_id
-    r_id="${pair%% *}"
-    a_id="${pair##* }"
-    echo "  -> Cancelling archival task ${a_id} (run ${r_id})..." >&2
-    pg_run_cancel "[{\"runId\": \"${r_id}\", \"archivalTaskId\": [\"${a_id}\"]}]" > /dev/null \
-      || echo "  -> Archival cancel request may have failed, continuing..." >&2
-  done
 
   echo "$active_found"
 }
 
-has_active_runs() {
-  check_active_runs
+# Returns 0 (active work exists) or 1 (all terminal).
+has_active_work() {
+  local backup_count archival_count
+  backup_count=$(pg_active_backup_runs  | jq '.runs | length // 0')
+  archival_count=$(pg_active_archival_runs | jq '
+    [ .runs[].archivalInfo.archivalTargetResults[]? |
+      select(.archivalTaskId != null and .archivalTaskId != "") ] | length')
+  [[ "$backup_count" -gt 0 || "$archival_count" -gt 0 ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -216,7 +213,7 @@ main() {
   ibmcloud_login
 
   echo "Pausing protection group ${API_PG_ID} to block new runs..." >&2
-  pg_update_pause
+  pg_pause
 
   # Wait briefly so any run BRS had already internally queued (but not yet
   # visible via /runs) has time to surface before we check.
@@ -225,7 +222,7 @@ main() {
 
   echo "Checking for active runs on protection group: ${API_PG_ID}" >&2
   local active_count
-  active_count=$(cancel_active_runs)
+  active_count=$(check_and_cancel)
 
   if [[ "$active_count" -eq 0 ]]; then
     echo "No active runs found. Protection group is ready for deletion." >&2
@@ -244,7 +241,7 @@ main() {
   while [[ "$(date +%s)" -lt "$timeout_at" ]]; do
     sleep 20
     echo "Re-checking run states..." >&2
-    if ! has_active_runs; then
+    if ! has_active_work; then
       echo "All runs stopped. Waiting 30s for BRS to commit final state..." >&2
       sleep 30
       exit 0
@@ -252,7 +249,7 @@ main() {
     # Re-issue cancel each iteration: a run may have transitioned from a
     # non-cancellable phase (e.g. initialising) into a cancellable one, or
     # the previous cancel may have been silently dropped by BRS.
-    cancel_active_runs > /dev/null
+    check_and_cancel > /dev/null
   done
 
   echo "ERROR: Timed out (60 min) waiting for run cancellation to complete." >&2
