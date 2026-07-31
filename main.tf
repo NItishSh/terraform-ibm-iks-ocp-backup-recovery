@@ -1010,6 +1010,7 @@ resource "terraform_data" "cancel_pg_runs" {
   input = {
     region              = local.brs_instance_region
     tenant              = local.brs_tenant_id
+    brs_endpoint        = local.backup_recovery_instance_url
     protection_group_id = ibm_backup_recovery_protection_group.protection_group[each.key].id
   }
 
@@ -1019,7 +1020,7 @@ resource "terraform_data" "cancel_pg_runs" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "${path.module}/scripts/cancel_pg_runs.sh '${self.input.region}' '${self.input.tenant}' '${self.input.protection_group_id}'"
+    command     = "${path.module}/scripts/cancel_pg_runs.sh '${self.input.region}' '${self.input.tenant}' '${self.input.protection_group_id}' '${self.input.brs_endpoint}'"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       IBMCLOUD_API_KEY = self.triggers_replace.api_key # pragma: allowlist secret

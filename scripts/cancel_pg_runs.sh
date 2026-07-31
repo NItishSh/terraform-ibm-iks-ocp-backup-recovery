@@ -7,10 +7,15 @@ set -euo pipefail
 # Uses the ibmcloud backup-recovery CLI (br plugin) so no bearer-token
 # management or raw curl is needed.
 #
-# Usage: cancel_pg_runs.sh REGION TENANT PROTECTION_GROUP_ID
+# Usage: cancel_pg_runs.sh REGION TENANT PROTECTION_GROUP_ID BRS_ENDPOINT
 #   REGION               — IBM Cloud region of the BRS instance (e.g. us-south)
-#   TENANT               — X-IBM-Tenant-Id value (e.g. 8phgk0sod0)
+#   TENANT               — X-IBM-Tenant-Id value (e.g. 8phgk0sod0/)
 #   PROTECTION_GROUP_ID  — full Terraform ID (clusterid/::timestamp:id:id)
+#   BRS_ENDPOINT         — BRS hostname without scheme or path
+#                          e.g. <guid>.<region>.backup-recovery.cloud.ibm.com
+#                          Used to set the ibmcloud br service-url before any
+#                          backup-recovery CLI calls. Without this every br
+#                          command silently fails with an auth/404 error.
 #
 # Required env var:
 #   IBMCLOUD_API_KEY     — IBM Cloud API key used to log in
@@ -41,8 +46,8 @@ vlog() {
   echo "${body}" | jq '.' 2>/dev/null >&2 || echo "${body}" >&2
 }
 
-if [ "$#" -lt 3 ]; then
-  echo "Usage: $0 REGION TENANT PROTECTION_GROUP_ID" >&2
+if [ "$#" -lt 4 ]; then
+  echo "Usage: $0 REGION TENANT PROTECTION_GROUP_ID BRS_ENDPOINT" >&2
   echo "Note: IBMCLOUD_API_KEY must be set as an environment variable" >&2
   exit 1
 fi
@@ -55,6 +60,7 @@ fi
 REGION=$1
 TENANT=$2
 PROTECTION_GROUP_ID=$3
+BRS_ENDPOINT=$4
 
 # Extract numeric PG ID (after ::)
 # Format: clusterid/::timestamp:id:id -> timestamp:id:id
@@ -69,6 +75,15 @@ ibmcloud_login() {
   login_out=$(ibmcloud login --apikey "${IBMCLOUD_API_KEY}" -r "${REGION}" -q 2>&1) || true
   echo "${login_out}" | grep -v "^$" >&2 || true
   vlog "ibmcloud login" "${login_out}"
+
+  # Set the BRS service URL so all backup-recovery CLI commands reach the
+  # correct instance. Without this step every 'ibmcloud backup-recovery'
+  # command fails with an authentication or 404 error — the CLI has no default
+  # endpoint and the config is not persisted between sessions.
+  local brs_url="https://${BRS_ENDPOINT}/v2"
+  echo "Setting BRS service URL: ${brs_url}" >&2
+  ibmcloud backup-recovery config set service-url "${brs_url}" 2>&1 \
+    | grep -v "^$" >&2 || true
 }
 
 # ---------------------------------------------------------------------------
