@@ -157,21 +157,41 @@ check_active_runs() {
   return 1
 }
 
+# cancel_active_runs:  send cancels for whatever is currently active, then
+# return the count of active items found.
+#
+# Backup and archival phases are sequential, not simultaneous:
+#
+#   Phase 1 — Backup  (run.status = Running)
+#     → cancel run-level: {"runId": "..."}
+#     → BRS stops the backup.  Archival may or may not start afterward.
+#
+#   Phase 2 — Archival  (archivalTargetResults[i].status = Running)
+#     The archival task may not exist yet when we first call this function.
+#     It is caught on the *next poll iteration* once it surfaces in the API.
+#     → cancel archival-level: {"runId": "...", "archivalTaskId": ["..."]}
+#
+# Because this function is called in a loop (every 20 s), a run-level cancel
+# on an already-Succeeded run is harmless (BRS ignores it), and archival tasks
+# that appear after the backup phase ends will be picked up automatically.
 cancel_active_runs() {
   check_active_runs || true
 
   local active_found
   active_found=$(( ${#ACTIVE_RUN_IDS[@]} + ${#ACTIVE_ARCHIVAL_PAIRS[@]} ))
 
-  # Cancel non-terminal runs
+  # Phase 1: cancel any non-terminal backup run
   local run_id
   for run_id in "${ACTIVE_RUN_IDS[@]}"; do
-    echo "  -> Cancelling run ${run_id}..." >&2
+    echo "  -> Cancelling backup run ${run_id}..." >&2
     pg_run_cancel "[{\"runId\": \"${run_id}\"}]" > /dev/null \
       || echo "  -> Cancel request may have failed, continuing..." >&2
   done
 
-  # Cancel active archival tasks — archivalTaskId is an array per the API schema
+  # Phase 2: cancel any non-terminal archival task.
+  # archivalTaskId is an array per the BRS API schema.
+  # If the archival phase hasn't started yet this array will be empty and
+  # the loop body won't execute; it will be populated on the next poll.
   local pair
   for pair in "${ACTIVE_ARCHIVAL_PAIRS[@]}"; do
     local r_id a_id
