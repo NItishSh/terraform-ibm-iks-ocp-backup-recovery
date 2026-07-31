@@ -14,10 +14,32 @@ set -euo pipefail
 #
 # Required env var:
 #   IBMCLOUD_API_KEY     — IBM Cloud API key used to log in
+#
+# Optional env var:
+#   VERBOSE              — set to 1 to print every raw API response to stderr.
+#                          Off (0) by default to keep Terraform output clean.
+#                          Enable when diagnosing whether failures originate
+#                          in server responses or in this script's logic.
+#                          Example: VERBOSE=1 terraform destroy
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/common_utils.sh
 source "${SCRIPT_DIR}/common_utils.sh"
+
+# ---------------------------------------------------------------------------
+# Verbose logging — all raw API responses are emitted to stderr when VERBOSE=1.
+# Toggle off once the script is known-good to reduce Terraform output noise.
+# ---------------------------------------------------------------------------
+VERBOSE="${VERBOSE:-0}"
+
+# vlog LABEL JSON — print label + pretty-printed JSON to stderr when verbose.
+vlog() {
+  [[ "${VERBOSE}" == "1" ]] || return 0
+  local label="$1"
+  local body="$2"
+  echo "[VERBOSE] ${label}:" >&2
+  echo "${body}" | jq '.' 2>/dev/null >&2 || echo "${body}" >&2
+}
 
 if [ "$#" -lt 3 ]; then
   echo "Usage: $0 REGION TENANT PROTECTION_GROUP_ID" >&2
@@ -43,7 +65,10 @@ API_PG_ID="${PROTECTION_GROUP_ID#*::}"
 # ---------------------------------------------------------------------------
 ibmcloud_login() {
   echo "Logging in to IBM Cloud (region: ${REGION})..." >&2
-  ibmcloud login --apikey "${IBMCLOUD_API_KEY}" -r "${REGION}" -q 2>&1 | grep -v "^$" >&2 || true
+  local login_out
+  login_out=$(ibmcloud login --apikey "${IBMCLOUD_API_KEY}" -r "${REGION}" -q 2>&1) || true
+  echo "${login_out}" | grep -v "^$" >&2 || true
+  vlog "ibmcloud login" "${login_out}"
 }
 
 # ---------------------------------------------------------------------------
@@ -58,10 +83,12 @@ pg_pause() {
   pg_json=$(ibmcloud backup-recovery protection-group get \
     --id "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
-    --output json -q 2>/dev/null) || {
+    --output json -q 2>&1) || {
     echo "Could not fetch protection group details; skipping pause." >&2
+    vlog "protection-group get (error)" "${pg_json}"
     return 0
   }
+  vlog "protection-group get" "${pg_json}"
 
   local pg_name pg_policy_id pg_env
   pg_name=$(echo    "$pg_json" | jq -r '.name        // empty')
@@ -73,15 +100,19 @@ pg_pause() {
     return 0
   fi
 
-  ibmcloud backup-recovery protection-group update \
+  local update_out
+  update_out=$(ibmcloud backup-recovery protection-group update \
     --id          "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
     --name        "${pg_name}" \
     --policy-id   "${pg_policy_id}" \
     --environment "${pg_env}" \
     --is-paused=true \
-    -q 2>/dev/null \
-    || echo "Pause request failed; continuing anyway..." >&2
+    -q 2>&1) \
+    || { echo "Pause request failed; continuing anyway..." >&2
+         vlog "protection-group update (error)" "${update_out}"
+         return 0; }
+  vlog "protection-group update" "${update_out}"
 }
 
 # ---------------------------------------------------------------------------
@@ -101,25 +132,31 @@ pg_pause() {
 ACTIVE_STATUSES="Accepted,Running,Canceling,OnHold,Finalizing"
 
 pg_active_backup_runs() {
-  ibmcloud backup-recovery protection-group-run list \
+  local out
+  out=$(ibmcloud backup-recovery protection-group-run list \
     --id "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
     --local-backup-run-status "${ACTIVE_STATUSES}" \
     --num-runs 10 \
     --include-object-details=false \
-    --output json -q 2>/dev/null \
-    || echo '{"runs":[]}'
+    --output json -q 2>&1) \
+    || out='{"runs":[]}'
+  vlog "protection-group-run list (backup)" "${out}"
+  echo "${out}"
 }
 
 pg_active_archival_runs() {
-  ibmcloud backup-recovery protection-group-run list \
+  local out
+  out=$(ibmcloud backup-recovery protection-group-run list \
     --id "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
     --archival-run-status "${ACTIVE_STATUSES}" \
     --num-runs 10 \
     --include-object-details=false \
-    --output json -q 2>/dev/null \
-    || echo '{"runs":[]}'
+    --output json -q 2>&1) \
+    || out='{"runs":[]}'
+  vlog "protection-group-run list (archival)" "${out}"
+  echo "${out}"
 }
 
 # ---------------------------------------------------------------------------
@@ -147,13 +184,15 @@ check_and_cancel() {
       run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
         '.runs[] | select(.id == $id) | .status // "<unknown>"')
       echo "  Backup run ${run_id}: status=${run_status} → cancelling..." >&2
-      ibmcloud backup-recovery protection-group-run perform-action \
+      local cancel_backup_out
+      cancel_backup_out=$(ibmcloud backup-recovery protection-group-run perform-action \
         --id "${API_PG_ID}" \
         --xibm-tenant-id "${TENANT}" \
         --action Cancel \
         --cancel-params "[{\"runId\": \"${run_id}\"}]" \
-        -q 2>/dev/null \
+        -q 2>&1) \
         || echo "  Cancel request may have failed, continuing..." >&2
+      vlog "perform-action Cancel backup run=${run_id}" "${cancel_backup_out}"
       active_found=$(( active_found + 1 ))
     done <<< "$run_ids"
   fi
@@ -182,13 +221,15 @@ check_and_cancel() {
         select(.archivalTaskId == $aid) | .status // "<unknown>"')
       echo "  Archival task ${a_id} (run ${r_id}): status=${a_status} → cancelling..." >&2
       # archivalTaskId must be passed as a JSON array per the BRS API schema
-      ibmcloud backup-recovery protection-group-run perform-action \
+      local cancel_arch_out
+      cancel_arch_out=$(ibmcloud backup-recovery protection-group-run perform-action \
         --id "${API_PG_ID}" \
         --xibm-tenant-id "${TENANT}" \
         --action Cancel \
         --cancel-params "[{\"runId\": \"${r_id}\", \"archivalTaskId\": [\"${a_id}\"]}]" \
-        -q 2>/dev/null \
+        -q 2>&1) \
         || echo "  Archival cancel request may have failed, continuing..." >&2
+      vlog "perform-action Cancel archival run=${r_id} task=${a_id}" "${cancel_arch_out}"
       active_found=$(( active_found + 1 ))
     done <<< "$pairs"
   fi
