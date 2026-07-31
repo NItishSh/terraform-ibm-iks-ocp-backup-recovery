@@ -576,12 +576,12 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # BRS source deregistration is async on the backend. Without this sleep,
 # DeleteDataSourceConnectionWithContext fails with "can't be deleted as it is
 # being used by the source" because the connection is still referenced when
-# helm_release attempts to delete it.
+# the DSC connection cleanup script runs on the BRS instance side.
 # destroy_duration fires between source_registration destruction and the
 # namespace wait, giving BRS time to process the async deregistration.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "5m" # Increased to allow sufficient time for async deregistration
+  destroy_duration = "10m" # 10m to allow BRS async deregistration before connection delete
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.
@@ -977,7 +977,8 @@ resource "ibm_backup_recovery_protection_group" "protection_group" {
 
   depends_on = [
     data.ibm_backup_recovery_protection_sources.sources,
-    time_sleep.wait_for_source_discovery
+    time_sleep.wait_for_source_discovery,
+    time_sleep.post_cancel_pg_wait
   ]
 
   lifecycle {
@@ -1028,6 +1029,18 @@ resource "terraform_data" "cancel_pg_runs" {
   }
 
   depends_on = [ibm_backup_recovery_protection_group.protection_group]
+}
+
+# After cancel_pg_runs fires its cancel provisioner, BRS needs a brief window
+# to actually transition all run states to terminal before the provider sends
+# DELETE. Without this gap the provider's delete call can race the final state
+# transition and return "Cannot delete the backup job as it is currently running".
+# destroy ordering: cancel_pg_runs -> post_cancel_pg_wait -> protection_group
+resource "time_sleep" "post_cancel_pg_wait" {
+  for_each = { for pg in var.protection_groups : pg.name => pg }
+
+  depends_on       = [terraform_data.cancel_pg_runs]
+  destroy_duration = "2m"
 }
 
 ##############################################################################

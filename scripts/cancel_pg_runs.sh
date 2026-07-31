@@ -26,13 +26,23 @@ PROTECTION_GROUP_ID=$4
 # Format: clusterid/::timestamp:id:id -> timestamp:id:id
 API_PG_ID="${PROTECTION_GROUP_ID#*::}"
 
-IAM_TOKEN="" # pragma: allowlist secret
+IAM_TOKEN=""      # pragma: allowlist secret
+TOKEN_FETCHED_AT=0  # epoch seconds when the token was last obtained
 
 call_api() {
   local method=$1
   local path=$2
   shift 2
   local response http_code body
+
+  # Refresh IAM token if it is older than 45 minutes (tokens last ~60 min).
+  local now
+  now=$(date +%s)
+  if (( now - TOKEN_FETCHED_AT >= 2700 )); then
+    echo "Refreshing IAM token..." >&2
+    IAM_TOKEN=$(get_iam_token "${API_KEY}" "${ENDPOINT_TYPE}") # pragma: allowlist secret
+    TOKEN_FETCHED_AT=$now
+  fi
 
   response=$(curl --retry 3 -s -w "\n%{http_code}" -X "$method" "${URL}${path}" \
     -H "Authorization: Bearer ${IAM_TOKEN}" \
@@ -169,6 +179,7 @@ pause_protection_group() {
 main() {
   echo "Getting IAM token..."
   IAM_TOKEN=$(get_iam_token "${API_KEY}" "${ENDPOINT_TYPE}") # pragma: allowlist secret
+  TOKEN_FETCHED_AT=$(date +%s)
 
   echo "Pausing protection group ${API_PG_ID} to block new runs..."
   pause_protection_group
@@ -188,23 +199,27 @@ main() {
     exit 0
   fi
 
-  # Wait for all active runs to reach a terminal state
-  echo "Waiting for ${active_count} active run(s) to stop..."
+  # Wait for all active runs to reach a terminal state.
+  # Timeout is 30 minutes — backup jobs can take 15–20 min to cancel when
+  # archival (CloudArchiveDirect) tasks are in flight.
+  echo "Waiting for ${active_count} active run(s) to stop (timeout 30m)..."
   local timeout_at
-  timeout_at=$(( $(date +%s) + 600 ))
+  timeout_at=$(( $(date +%s) + 1800 ))
 
   while [[ "$(date +%s)" -lt "$timeout_at" ]]; do
-    sleep 15
+    sleep 30
     echo "Re-checking run states..."
     if ! has_active_runs; then
       echo "All runs stopped. Protection group is ready for deletion."
       exit 0
     fi
-    # Re-issue cancel in case a run transitioned to a cancellable state
+    # Re-issue cancel each iteration: a run may have transitioned from a
+    # non-cancellable phase (e.g. initialising) into a cancellable one, or
+    # the previous cancel API call may have been silently dropped by BRS.
     cancel_active_runs > /dev/null
   done
 
-  echo "WARNING: Timed out (10 min) waiting for run cancellation. Proceeding anyway." >&2
+  echo "WARNING: Timed out (30 min) waiting for run cancellation. Proceeding anyway." >&2
   exit 0
 }
 
