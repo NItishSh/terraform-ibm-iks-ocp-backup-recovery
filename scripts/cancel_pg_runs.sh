@@ -162,77 +162,102 @@ pg_active_archival_runs() {
 # ---------------------------------------------------------------------------
 # check_and_cancel: single pass — detect active work and issue cancels.
 #
-# Uses a single jq expression per response to extract all relevant IDs at
-# once (avoids one jq fork per run/task in a loop).
+# Both list calls are still needed (backup and archival use different
+# server-side status filters), but per-run we merge localTaskId (backup)
+# and archivalTaskId[] (archival) into ONE perform-action cancel call
+# instead of issuing a separate call per phase.
 #
-# Returns the total count of active items found (via stdout).
+# cancelParams schema (BRS API):
+#   runId          String     required
+#   localTaskId    String     optional — backup-phase task ID
+#   archivalTaskId String[]   optional — archival task IDs to cancel
+#
+# Returns the total count of active run IDs found (via stdout).
 # All diagnostic output goes to stderr.
 # ---------------------------------------------------------------------------
 check_and_cancel() {
   local active_found=0
 
-  # --- Phase 1: non-terminal backup runs ---
-  local backup_data run_ids
+  local backup_data archival_data
   backup_data=$(pg_active_backup_runs)
-  # Extract all run IDs in one jq call
-  run_ids=$(echo "$backup_data" | jq -r '[.runs[].id // empty] | .[]')
-
-  if [[ -n "$run_ids" ]]; then
-    while IFS= read -r run_id; do
-      [[ -z "$run_id" ]] && continue
-      local run_status
-      run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
-        '.runs[] | select(.id == $id) | .status // "<unknown>"')
-      echo "  Backup run ${run_id}: status=${run_status} → cancelling..." >&2
-      local cancel_backup_out
-      cancel_backup_out=$(ibmcloud backup-recovery protection-group-run perform-action \
-        --id "${API_PG_ID}" \
-        --xibm-tenant-id "${TENANT}" \
-        --action Cancel \
-        --cancel-params "[{\"runId\": \"${run_id}\"}]" \
-        -q 2>&1) \
-        || echo "  Cancel request may have failed, continuing..." >&2
-      vlog "perform-action Cancel backup run=${run_id}" "${cancel_backup_out}"
-      active_found=$(( active_found + 1 ))
-    done <<< "$run_ids"
-  fi
-
-  # --- Phase 2: non-terminal archival tasks ---
-  # A run's archival task may be active even when the backup phase is terminal.
-  # We fetch separately using --archival-run-status so we don't miss them.
-  local archival_data pairs
   archival_data=$(pg_active_archival_runs)
-  # Single jq call: emit "runId archivalTaskId" lines for all active tasks
-  pairs=$(echo "$archival_data" | jq -r '
-    .runs[] |
-    .id as $rid |
-    .archivalInfo.archivalTargetResults[]? |
-    select(.archivalTaskId != null and .archivalTaskId != "") |
-    "\($rid) \(.archivalTaskId)"
-  ')
 
-  if [[ -n "$pairs" ]]; then
-    while IFS=" " read -r r_id a_id; do
-      [[ -z "$r_id" || -z "$a_id" ]] && continue
-      local a_status
-      a_status=$(echo "$archival_data" | jq -r --arg rid "$r_id" --arg aid "$a_id" '
-        .runs[] | select(.id == $rid) |
-        .archivalInfo.archivalTargetResults[] |
-        select(.archivalTaskId == $aid) | .status // "<unknown>"')
-      echo "  Archival task ${a_id} (run ${r_id}): status=${a_status} → cancelling..." >&2
-      # archivalTaskId must be passed as a JSON array per the BRS API schema
-      local cancel_arch_out
-      cancel_arch_out=$(ibmcloud backup-recovery protection-group-run perform-action \
-        --id "${API_PG_ID}" \
-        --xibm-tenant-id "${TENANT}" \
-        --action Cancel \
-        --cancel-params "[{\"runId\": \"${r_id}\", \"archivalTaskId\": [\"${a_id}\"]}]" \
-        -q 2>&1) \
-        || echo "  Archival cancel request may have failed, continuing..." >&2
-      vlog "perform-action Cancel archival run=${r_id} task=${a_id}" "${cancel_arch_out}"
-      active_found=$(( active_found + 1 ))
-    done <<< "$pairs"
-  fi
+  # Collect the union of all active run IDs across both responses.
+  local all_run_ids
+  all_run_ids=$(
+    { echo "$backup_data"; echo "$archival_data"; } \
+      | jq -rs '[.[].runs[].id // empty] | unique | .[]'
+  )
+
+  [[ -z "$all_run_ids" ]] && { echo "0"; return 0; }
+
+  while IFS= read -r run_id; do
+    [[ -z "$run_id" ]] && continue
+
+    # --- extract backup-phase info for this run (may be absent) ---
+    local b_status local_task_id
+    b_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
+      '.runs[] | select(.id == $id) | .localBackupInfo.localTaskId // empty')
+    # top-level .status on the run reflects backup phase
+    local run_status
+    run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
+      '.runs[] | select(.id == $id) | .status // empty')
+    local_task_id="${b_status}"   # may be empty if backup phase is terminal
+
+    # --- extract archival task IDs for this run (may be empty array) ---
+    local archival_task_ids
+    archival_task_ids=$(echo "$archival_data" | jq -r --arg id "$run_id" '
+      [ .runs[] | select(.id == $id) |
+        .archivalInfo.archivalTargetResults[]? |
+        select(.archivalTaskId != null and .archivalTaskId != "") |
+        .archivalTaskId
+      ] | unique | .[]
+    ')
+
+    local a_statuses
+    a_statuses=$(echo "$archival_data" | jq -r --arg id "$run_id" '
+      [ .runs[] | select(.id == $id) |
+        .archivalInfo.archivalTargetResults[]? |
+        select(.archivalTaskId != null and .archivalTaskId != "") |
+        "\(.archivalTaskId)=\(.status // "unknown")"
+      ] | .[]
+    ')
+
+    echo "  Run ${run_id}: backup_status=${run_status:-none} archival=[${a_statuses//$'\n'/, }]" >&2
+
+    # --- build cancelParams JSON for this run ---
+    # Start with the mandatory runId.
+    local cancel_obj
+    cancel_obj=$(jq -n --arg rid "$run_id" '{"runId": $rid}')
+
+    # Attach localTaskId if the backup phase is still active.
+    if [[ -n "$local_task_id" ]]; then
+      cancel_obj=$(echo "$cancel_obj" | jq --arg ltid "$local_task_id" \
+        '. + {"localTaskId": $ltid}')
+    fi
+
+    # Attach archivalTaskId array if any archival tasks are active.
+    if [[ -n "$archival_task_ids" ]]; then
+      local arch_array
+      arch_array=$(echo "$archival_task_ids" | jq -Rs '[split("\n")[] | select(. != "")]')
+      cancel_obj=$(echo "$cancel_obj" | jq --argjson arr "$arch_array" \
+        '. + {"archivalTaskId": $arr}')
+    fi
+
+    local cancel_params="[${cancel_obj}]"
+    echo "  Issuing cancel for run ${run_id}..." >&2
+    local cancel_out
+    cancel_out=$(ibmcloud backup-recovery protection-group-run perform-action \
+      --id "${API_PG_ID}" \
+      --xibm-tenant-id "${TENANT}" \
+      --action Cancel \
+      --cancel-params "${cancel_params}" \
+      -q 2>&1) \
+      || echo "  Cancel request may have failed, continuing..." >&2
+    vlog "perform-action Cancel run=${run_id} params=${cancel_params}" "${cancel_out}"
+
+    active_found=$(( active_found + 1 ))
+  done <<< "$all_run_ids"
 
   echo "$active_found"
 }
