@@ -323,17 +323,23 @@ has_active_work() {
   backup_data=$(pg_active_backup_runs)
   archival_data=$(pg_active_archival_runs)
 
-  # Non-CAD PGs: count runs where the backup-phase .status is non-null (i.e. active)
+  # Non-CAD PGs: count runs where the backup-phase .status is non-null (active).
+  # Use (.runs // []) to guard against null .runs (e.g. non-JSON CLI response).
   backup_count=$(echo "$backup_data" | jq '
-    [ .runs[] | select(.status != null and .status != "") ] | length')
+    [ (.runs // [])[] | select(.status != null and .status != "") ] | length' \
+    2>/dev/null) || backup_count=0
+  [[ "${backup_count}" =~ ^[0-9]+$ ]] || backup_count=0
 
   # Both CAD and non-CAD: count archival tasks with a non-terminal status.
-  # Guard against .archivalInfo being null (seen on terminal runs in live testing).
+  # (.runs // []) guards null root; (.archivalInfo.archivalTargetResults // [])
+  # guards null .archivalInfo on terminal runs (confirmed in live testing).
   archival_count=$(echo "$archival_data" | jq '
-    [ .runs[] |
+    [ (.runs // [])[] |
       (.archivalInfo.archivalTargetResults // [])[] |
       select(.archivalTaskId != null and .archivalTaskId != "")
-    ] | length')
+    ] | length' \
+    2>/dev/null) || archival_count=0
+  [[ "${archival_count}" =~ ^[0-9]+$ ]] || archival_count=0
 
   [[ "$backup_count" -gt 0 || "$archival_count" -gt 0 ]]
 }
