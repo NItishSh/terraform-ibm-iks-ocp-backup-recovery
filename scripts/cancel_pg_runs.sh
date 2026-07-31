@@ -196,6 +196,9 @@ main() {
 
   if [[ "$active_count" -eq 0 ]]; then
     echo "No active runs found. Protection group is ready for deletion."
+    # Brief settle: even with no active runs, give BRS 30s to finish any
+    # in-progress state commit before the provider sends DELETE.
+    sleep 30
     exit 0
   fi
 
@@ -210,7 +213,11 @@ main() {
     sleep 30
     echo "Re-checking run states..."
     if ! has_active_runs; then
-      echo "All runs stopped. Protection group is ready for deletion."
+      echo "All runs stopped. Waiting 30s for BRS to commit final state..."
+      # Give BRS time to fully commit the terminal state before the provider
+      # sends DELETE — avoids the race where the API still reports a running
+      # job for a few seconds after the status transitions to terminal.
+      sleep 30
       exit 0
     fi
     # Re-issue cancel each iteration: a run may have transitioned from a
