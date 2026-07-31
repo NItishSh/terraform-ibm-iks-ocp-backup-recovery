@@ -128,9 +128,14 @@ pg_pause() {
 # has an active archival task.
 # ---------------------------------------------------------------------------
 
-# Non-terminal local-backup statuses
+# Non-terminal status values (same set applies to both phases).
 ACTIVE_STATUSES="Accepted,Running,Canceling,OnHold,Finalizing"
 
+# pg_active_backup_runs — finds runs where the LOCAL backup phase is non-terminal.
+# NOTE: CloudArchiveDirect (CAD) PGs have no local backup phase.
+#   .localBackupInfo is null and top-level .status is null for CAD runs.
+#   --local-backup-run-status returns an empty list for CAD PGs.
+#   These runs are only detectable via pg_active_archival_runs.
 pg_active_backup_runs() {
   local out
   out=$(ibmcloud backup-recovery protection-group-run list \
@@ -145,6 +150,8 @@ pg_active_backup_runs() {
   echo "${out}"
 }
 
+# pg_active_archival_runs — finds runs where an ARCHIVAL task is non-terminal.
+# This is the ONLY reliable way to detect active CAD PG runs.
 pg_active_archival_runs() {
   local out
   out=$(ibmcloud backup-recovery protection-group-run list \
@@ -194,15 +201,14 @@ check_and_cancel() {
   while IFS= read -r run_id; do
     [[ -z "$run_id" ]] && continue
 
-    # --- extract backup-phase info for this run (may be absent) ---
-    local b_status local_task_id
-    b_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
+    # --- extract backup-phase info for this run (absent for CAD PGs) ---
+    # For CloudArchiveDirect PGs: .localBackupInfo is null and .status is null.
+    # local_task_id will be empty — that's correct, we just won't set it in cancelParams.
+    local local_task_id run_status
+    local_task_id=$(echo "$backup_data" | jq -r --arg id "$run_id" \
       '.runs[] | select(.id == $id) | .localBackupInfo.localTaskId // empty')
-    # top-level .status on the run reflects backup phase
-    local run_status
     run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
       '.runs[] | select(.id == $id) | .status // empty')
-    local_task_id="${b_status}"   # may be empty if backup phase is terminal
 
     # --- extract archival task IDs for this run (may be empty array) ---
     local archival_task_ids
@@ -263,12 +269,28 @@ check_and_cancel() {
 }
 
 # Returns 0 (active work exists) or 1 (all terminal).
+#
+# Counts active items across BOTH phases:
+#   backup_count  — runs with a non-terminal local backup phase (0 for CAD PGs)
+#   archival_count — archival tasks with a non-terminal status (the only signal for CAD PGs)
+#
+# IMPORTANT: do NOT use '.runs | length' for backup_count — that counts all returned
+# runs, not just ones with an active backup phase. Use the archivalTargetResults
+# status check for archival, and the run-level .status for non-CAD backup runs.
 has_active_work() {
-  local backup_count archival_count
-  backup_count=$(pg_active_backup_runs  | jq '.runs | length // 0')
-  archival_count=$(pg_active_archival_runs | jq '
+  local backup_data archival_data backup_count archival_count
+  backup_data=$(pg_active_backup_runs)
+  archival_data=$(pg_active_archival_runs)
+
+  # Non-CAD PGs: count runs where the backup-phase .status is non-null (i.e. active)
+  backup_count=$(echo "$backup_data" | jq '
+    [ .runs[] | select(.status != null and .status != "") ] | length')
+
+  # Both CAD and non-CAD: count archival tasks with a non-terminal status
+  archival_count=$(echo "$archival_data" | jq '
     [ .runs[].archivalInfo.archivalTargetResults[]? |
       select(.archivalTaskId != null and .archivalTaskId != "") ] | length')
+
   [[ "$backup_count" -gt 0 || "$archival_count" -gt 0 ]]
 }
 
