@@ -75,8 +75,11 @@ ibmcloud_login() {
 # Pause the protection group to block new runs.
 #
 # 'protection-group update' requires --name, --policy-id, and --environment
-# even when only changing --is-paused. We GET the group first to extract
-# those required fields, then issue the update.
+# even when only changing --is-paused. For kKubernetes PGs it also requires
+# --kubernetes-params (confirmed on live instance: omitting it returns
+# "Parameters 'kubernetesParams' must be specified for environment type
+# 'kKubernetes'"). We GET the group first, extract all required fields,
+# then pass them verbatim back in the update.
 # ---------------------------------------------------------------------------
 pg_pause() {
   local pg_json
@@ -91,28 +94,46 @@ pg_pause() {
   vlog "protection-group get" "${pg_json}"
 
   local pg_name pg_policy_id pg_env
-  pg_name=$(echo    "$pg_json" | jq -r '.name        // empty')
-  pg_policy_id=$(echo "$pg_json" | jq -r '.policyId  // empty')
-  pg_env=$(echo     "$pg_json" | jq -r '.environment // empty')
+  pg_name=$(echo       "$pg_json" | jq -r '.name        // empty')
+  pg_policy_id=$(echo  "$pg_json" | jq -r '.policyId    // empty')
+  pg_env=$(echo        "$pg_json" | jq -r '.environment // empty')
 
   if [[ -z "$pg_name" || -z "$pg_policy_id" || -z "$pg_env" ]]; then
     echo "Could not extract required PG fields (name/policyId/environment); skipping pause." >&2
     return 0
   fi
 
+  # Build the update command as an array so we can conditionally append
+  # --kubernetes-params without messy quoting or eval.
+  local -a update_cmd=(
+    ibmcloud backup-recovery protection-group update
+    --id             "${API_PG_ID}"
+    --xibm-tenant-id "${TENANT}"
+    --name           "${pg_name}"
+    --policy-id      "${pg_policy_id}"
+    --environment    "${pg_env}"
+    --is-paused=true
+    -q
+  )
+
+  # kKubernetes PGs require the full kubernetesParams body on every update.
+  if [[ "${pg_env}" == "kKubernetes" ]]; then
+    local k8s_params
+    k8s_params=$(echo "$pg_json" | jq -c '.kubernetesParams // empty')
+    if [[ -n "${k8s_params}" ]]; then
+      update_cmd+=(--kubernetes-params "${k8s_params}")
+    else
+      echo "Warning: kKubernetes PG has no kubernetesParams in GET response; pause may fail." >&2
+    fi
+  fi
+
   local update_out
-  update_out=$(ibmcloud backup-recovery protection-group update \
-    --id          "${API_PG_ID}" \
-    --xibm-tenant-id "${TENANT}" \
-    --name        "${pg_name}" \
-    --policy-id   "${pg_policy_id}" \
-    --environment "${pg_env}" \
-    --is-paused=true \
-    -q 2>&1) \
+  update_out=$("${update_cmd[@]}" 2>&1) \
     || { echo "Pause request failed; continuing anyway..." >&2
          vlog "protection-group update (error)" "${update_out}"
          return 0; }
   vlog "protection-group update" "${update_out}"
+  echo "Protection group ${API_PG_ID} paused successfully." >&2
 }
 
 # ---------------------------------------------------------------------------
@@ -146,6 +167,8 @@ pg_active_backup_runs() {
     --include-object-details=false \
     --output json -q 2>&1) \
     || out='{"runs":[]}'
+  # Guard: CLI may return empty string (not JSON) on a valid 200 with no runs.
+  [[ "${out}" == *"{"* ]] || out='{"runs":[]}'
   vlog "protection-group-run list (backup)" "${out}"
   echo "${out}"
 }
@@ -162,6 +185,8 @@ pg_active_archival_runs() {
     --include-object-details=false \
     --output json -q 2>&1) \
     || out='{"runs":[]}'
+  # Guard: CLI may return empty string (not JSON) on a valid 200 with no runs.
+  [[ "${out}" == *"{"* ]] || out='{"runs":[]}'
   vlog "protection-group-run list (archival)" "${out}"
   echo "${out}"
 }
