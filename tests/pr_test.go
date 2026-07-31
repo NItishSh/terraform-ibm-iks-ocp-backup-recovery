@@ -274,6 +274,10 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// because its trigger (connection_id) changes between the base and the
 			// new connection. Must be exempted from both IgnoreDestroys and IgnoreAdds.
 			"module.protect_cluster.time_sleep.wait_for_source_discovery",
+			// anyuid_scc_rolebinding was removed in this PR (over-permissive SCC
+			// binding). The upgrade plan shows it as a destroy because it exists
+			// in state from the base version but is no longer in the module.
+			"module.protect_cluster.kubernetes_role_binding_v1.anyuid_scc_rolebinding[0]",
 		},
 	}
 	options.IgnoreAdds = testhelper.Exemptions{
@@ -308,6 +312,9 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// source_registration is updated in-place on upgrade because the new
 			// module version registers updated image versions against the same source.
 			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
+			// brs_source_deregistration_wait destroy_duration changed from 5m
+			// to 10m in this PR — in-place update, no resource replacement.
+			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
 		},
 	}
 
