@@ -179,6 +179,10 @@ pg_active_archival_runs() {
 #   localTaskId    String     optional — backup-phase task ID
 #   archivalTaskId String[]   optional — archival task IDs to cancel
 #
+# Once a task reaches "Canceling" status, BRS rejects further cancel
+# requests with "Copy Task: ... not found or not running".  We skip
+# re-issuing cancel for tasks already in Canceling — they just need time.
+#
 # Returns the total count of active run IDs found (via stdout).
 # All diagnostic output goes to stderr.
 # ---------------------------------------------------------------------------
@@ -210,12 +214,17 @@ check_and_cancel() {
     run_status=$(echo "$backup_data" | jq -r --arg id "$run_id" \
       '.runs[] | select(.id == $id) | .status // empty')
 
-    # --- extract archival task IDs for this run (may be empty array) ---
+    # --- extract archival tasks that are NOT yet Canceling ---
+    # Once a task is Canceling, BRS rejects further cancel requests.
+    # Only send cancel for tasks still in a pre-cancel active state.
     local archival_task_ids
     archival_task_ids=$(echo "$archival_data" | jq -r --arg id "$run_id" '
       [ .runs[] | select(.id == $id) |
-        .archivalInfo.archivalTargetResults[]? |
-        select(.archivalTaskId != null and .archivalTaskId != "") |
+        (.archivalInfo.archivalTargetResults // [])[] |
+        select(
+          .archivalTaskId != null and .archivalTaskId != "" and
+          .status != null and (.status | test("Canceling") | not)
+        ) |
         .archivalTaskId
       ] | unique | .[]
     ')
@@ -223,7 +232,7 @@ check_and_cancel() {
     local a_statuses
     a_statuses=$(echo "$archival_data" | jq -r --arg id "$run_id" '
       [ .runs[] | select(.id == $id) |
-        .archivalInfo.archivalTargetResults[]? |
+        (.archivalInfo.archivalTargetResults // [])[] |
         select(.archivalTaskId != null and .archivalTaskId != "") |
         "\(.archivalTaskId)=\(.status // "unknown")"
       ] | .[]
@@ -231,8 +240,15 @@ check_and_cancel() {
 
     echo "  Run ${run_id}: backup_status=${run_status:-none} archival=[${a_statuses//$'\n'/, }]" >&2
 
+    # Skip this run entirely if nothing needs a cancel request
+    # (backup not active, all archival tasks already Canceling or terminal)
+    if [[ -z "$local_task_id" && -z "$archival_task_ids" ]]; then
+      echo "  Run ${run_id}: all tasks already Canceling or terminal — waiting..." >&2
+      active_found=$(( active_found + 1 ))
+      continue
+    fi
+
     # --- build cancelParams JSON for this run ---
-    # Start with the mandatory runId.
     local cancel_obj
     cancel_obj=$(jq -n --arg rid "$run_id" '{"runId": $rid}')
 
@@ -242,7 +258,7 @@ check_and_cancel() {
         '. + {"localTaskId": $ltid}')
     fi
 
-    # Attach archivalTaskId array if any archival tasks are active.
+    # Attach archivalTaskId array for tasks that still need a cancel signal.
     if [[ -n "$archival_task_ids" ]]; then
       local arch_array
       arch_array=$(echo "$archival_task_ids" | jq -Rs '[split("\n")[] | select(. != "")]')
@@ -286,10 +302,13 @@ has_active_work() {
   backup_count=$(echo "$backup_data" | jq '
     [ .runs[] | select(.status != null and .status != "") ] | length')
 
-  # Both CAD and non-CAD: count archival tasks with a non-terminal status
+  # Both CAD and non-CAD: count archival tasks with a non-terminal status.
+  # Guard against .archivalInfo being null (seen on terminal runs in live testing).
   archival_count=$(echo "$archival_data" | jq '
-    [ .runs[].archivalInfo.archivalTargetResults[]? |
-      select(.archivalTaskId != null and .archivalTaskId != "") ] | length')
+    [ .runs[] |
+      (.archivalInfo.archivalTargetResults // [])[] |
+      select(.archivalTaskId != null and .archivalTaskId != "")
+    ] | length')
 
   [[ "$backup_count" -gt 0 || "$archival_count" -gt 0 ]]
 }
