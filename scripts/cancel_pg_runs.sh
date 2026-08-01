@@ -378,10 +378,20 @@ main() {
   active_count=$(check_and_cancel)
 
   if [[ "$active_count" -eq 0 ]]; then
-    echo "No active runs found. Protection group is ready for deletion." >&2
-    # Brief settle: give BRS time to finish any in-progress state commit.
-    sleep 30
-    exit 0
+    # Even when no runs are visible, BRS may have just queued one internally
+    # (e.g. immediately after receiving the pause request). Wait 2 minutes and
+    # re-check before declaring the PG clear. This prevents a race where the
+    # scheduler commits a run between our last check and the TF provider delete.
+    echo "No active runs found — waiting 2m for any late-arriving runs..." >&2
+    sleep 120
+    if has_active_work; then
+      echo "Newly-arrived run(s) detected after settle wait — entering cancel loop." >&2
+      # Fall through to the main cancel/wait loop below.
+    else
+      echo "Still no active runs after settle. Protection group is ready for deletion." >&2
+      exit 0
+    fi
+    active_count=$(check_and_cancel)
   fi
 
   # Wait for all active runs to reach a terminal state.
