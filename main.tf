@@ -1024,7 +1024,6 @@ resource "terraform_data" "cancel_pg_runs" {
     interpreter = ["/bin/bash", "-c"]
     environment = {
       IBMCLOUD_API_KEY = self.triggers_replace.api_key # pragma: allowlist secret
-      VERBOSE          = "1"
     }
   }
 
