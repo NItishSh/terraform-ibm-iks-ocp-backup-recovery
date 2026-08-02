@@ -212,13 +212,13 @@ variable "region" {
 }
 
 variable "brs_endpoint_type" {
-  description = "The endpoint type to use when connecting to the Backup and Recovery service. Allowed values are 'public', 'private', or 'vpe'. Use 'vpe' when a Virtual Private Endpoint Gateway is created via create_brs_vpe=true; the module will resolve the BRS endpoint from the VPEG reserved IP DNS name automatically."
+  description = "The endpoint type to use when connecting to the Backup and Recovery service for Terraform provider operations and script calls. Allowed values are 'public' or 'private'. When create_brs_vpe=true and this is set to 'private', the DSC pods reach BRS over the Virtual Private Endpoint Gateway (VPE) instead of the IBM Cloud Service Endpoint (CSE) — the BRS endpoint URL is automatically overridden to the VPE DNS hostname inside the cluster VPC."
   type        = string
   default     = "private"
 
   validation {
-    condition     = contains(["public", "private", "vpe"], var.brs_endpoint_type)
-    error_message = "`brs_endpoint_type` must be 'public', 'private', or 'vpe'."
+    condition     = contains(["public", "private"], var.brs_endpoint_type)
+    error_message = "`brs_endpoint_type` must be 'public' or 'private'."
   }
 }
 

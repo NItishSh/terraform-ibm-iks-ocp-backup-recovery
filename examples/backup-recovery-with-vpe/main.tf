@@ -170,11 +170,17 @@ module "backup_recovery" {
   brs_connection_name       = "${var.prefix}-brs-connection"
   brs_create_new_connection = true
 
-  # ---- VPEG connectivity ----
-  # brs_endpoint_type = "vpe" tells the module to compute the BRS endpoint as
-  # <guid>.private.<region>.backup-recovery.cloud.ibm.com, resolved by the
-  # VPEG reserved IPs inside the cluster VPC.
-  brs_endpoint_type     = "vpe"
+  # ---- Endpoint & VPEG connectivity ----
+  # brs_endpoint_type = "public" lets Terraform (running on your workstation or
+  # in CI) reach the BRS control plane directly to create resources.
+  #
+  # The DSC Helm chart does NOT use this setting for its own BRS communication.
+  # The chart reads cluster_endpoint from the registration token JWT, which BRS
+  # always encodes as the BRS private hostname. Setting create_brs_vpe = true
+  # creates a VPE Gateway in the cluster VPC so that private hostname resolves
+  # to a VPC-internal IP — routing DSC↔BRS traffic through the IBM backbone
+  # instead of the IBM Cloud Service Endpoint (CSE).
+  brs_endpoint_type     = "public" # Terraform uses public; DSC traffic routes via VPE automatically
   create_brs_vpe        = true
   vpc_id                = local.vpc_id
   vpc_subnets           = local.vpc_subnets

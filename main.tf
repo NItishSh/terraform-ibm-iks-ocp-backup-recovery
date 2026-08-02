@@ -39,15 +39,12 @@ locals {
   brs_instance_guid                    = module.backup_recovery_instance.brs_instance_guid
   brs_instance_region                  = element(split(":", module.backup_recovery_instance.brs_instance_crn), 5)
 
-  # When brs_endpoint_type == "vpe" the module uses the VPE Gateway DNS hostname.
-  # The VPEG module resolves it from the reserved IP after the gateway is stable
-  # (data.ibm_is_virtual_endpoint_gateway.vpe). For public/private, fall back to
-  # the CSE endpoints exposed by the BRS service instance extensions.
-  backup_recovery_instance_url = (
-    var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url :
-    var.brs_endpoint_type == "vpe" ? local.brs_vpe_hostname :
-    local.backup_recovery_instance_private_url
-  )
+  # URL used by Terraform provider resources and scripts to reach the BRS API.
+  # The DSC Helm chart does NOT use this URL — it reads the BRS private endpoint
+  # directly from the cluster_endpoint field embedded in the registration token JWT.
+  # The VPE Gateway makes that private hostname resolvable inside the VPC without
+  # any change to this URL.
+  backup_recovery_instance_url = var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url : local.backup_recovery_instance_private_url
 
   # Get resolved policy IDs from the BRS module
   resolved_policy_ids = module.backup_recovery_instance.resolved_policy_ids
@@ -245,14 +242,6 @@ locals {
   # vpc_name is used only in the VPE name template; fall back to the vpc_id
   # short-suffix when the worker pool data is unavailable (classic clusters).
   brs_vpe_vpc_name = local.is_vpc ? data.ibm_container_vpc_worker_pool.pool[0].vpc_id : "vpc"
-
-  # After the VPEG is created the module exposes a map of gateway → reserved IPs.
-  # Each IP has a .address (the private IP) and the DNS name is the canonical
-  # VPE hostname: <instance-guid>.private.<region>.backup-recovery.cloud.ibm.com
-  # We derive the hostname directly from the BRS instance CRN so it is known at
-  # plan time (no dependency on VPEG output for the local value used by resources
-  # that only need the hostname string, e.g. the BRS provider config).
-  brs_vpe_hostname = var.create_brs_vpe ? "${local.brs_instance_guid}.private.${local.brs_instance_region}.backup-recovery.cloud.ibm.com" : local.backup_recovery_instance_private_url
 }
 
 module "brs_vpe" {
