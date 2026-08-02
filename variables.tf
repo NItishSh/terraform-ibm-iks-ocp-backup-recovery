@@ -212,14 +212,54 @@ variable "region" {
 }
 
 variable "brs_endpoint_type" {
-  description = "The endpoint type to use when connecting to the Backup and Recovery service for creating a data source connection. Allowed values are 'public' or 'private'."
+  description = "The endpoint type to use when connecting to the Backup and Recovery service. Allowed values are 'public', 'private', or 'vpe'. Use 'vpe' when a Virtual Private Endpoint Gateway is created via create_brs_vpe=true; the module will resolve the BRS endpoint from the VPEG reserved IP DNS name automatically."
   type        = string
   default     = "private"
 
   validation {
-    condition     = contains(["public", "private"], var.brs_endpoint_type)
-    error_message = "`endpoint_type` must be 'public' or 'private'."
+    condition     = contains(["public", "private", "vpe"], var.brs_endpoint_type)
+    error_message = "`brs_endpoint_type` must be 'public', 'private', or 'vpe'."
   }
+}
+
+##############################################################################
+# Virtual Private Endpoint Gateway (VPEG) for BRS
+##############################################################################
+
+variable "create_brs_vpe" {
+  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. When true, vpc_id and vpc_subnets must also be provided. For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC where the BRS Virtual Private Endpoint Gateway will be created. Required when create_brs_vpe is true."
+  type        = string
+  default     = null
+}
+
+variable "vpc_subnets" {
+  description = "List of subnets (one per zone) in which to bind reserved IPs for the BRS VPE Gateway. Each entry must have 'name', 'id', and 'zone'. Required when create_brs_vpe is true. Use the subnet_zone_list output from terraform-ibm-landing-zone-vpc or equivalent."
+  type = list(object({
+    name = string
+    id   = string
+    zone = string
+  }))
+  default  = []
+  nullable = false
+}
+
+variable "brs_source_account_id" {
+  description = "IBM Cloud account ID of the account where the IKS/ROKS cluster (and its VPC) reside. Required only for cross-account setups where the BRS instance is in a different account. When provided, an S2S IAM authorization policy is created in the BRS account allowing VPC Infrastructure Services (endpoint-gateway) in the source account to access the BRS instance. Leave null for same-account deployments."
+  type        = string
+  default     = null
+}
+
+variable "brs_vpe_name" {
+  description = "Override the name of the BRS Virtual Private Endpoint Gateway. If null, the name is auto-generated as '<prefix>-<vpc_name>-backup-recovery'."
+  type        = string
+  default     = null
 }
 
 variable "existing_brs_instance_crn" {

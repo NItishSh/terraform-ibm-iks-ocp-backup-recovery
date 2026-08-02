@@ -38,7 +38,16 @@ locals {
   backup_recovery_instance_private_url = nonsensitive(module.backup_recovery_instance.brs_instance.extensions["endpoints.private"])
   brs_instance_guid                    = module.backup_recovery_instance.brs_instance_guid
   brs_instance_region                  = element(split(":", module.backup_recovery_instance.brs_instance_crn), 5)
-  backup_recovery_instance_url         = var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url : local.backup_recovery_instance_private_url
+
+  # When brs_endpoint_type == "vpe" the module uses the VPE Gateway DNS hostname.
+  # The VPEG module resolves it from the reserved IP after the gateway is stable
+  # (data.ibm_is_virtual_endpoint_gateway.vpe). For public/private, fall back to
+  # the CSE endpoints exposed by the BRS service instance extensions.
+  backup_recovery_instance_url = (
+    var.brs_endpoint_type == "public" ? local.backup_recovery_instance_public_url :
+    var.brs_endpoint_type == "vpe" ? local.brs_vpe_hostname :
+    local.backup_recovery_instance_private_url
+  )
 
   # Get resolved policy IDs from the BRS module
   resolved_policy_ids = module.backup_recovery_instance.resolved_policy_ids
@@ -181,6 +190,106 @@ module "dsc_sg_rule" {
       port_max  = local.cluster_endpoint_port
     }
   ]
+}
+
+##############################################################################
+# S2S IAM Authorization Policy (cross-account: source VPC → BRS instance)
+##############################################################################
+
+# When the BRS instance is in a different IBM Cloud account than the cluster VPC,
+# the VPEG target (the BRS CRN) lives in the target account.  The VPC
+# Infrastructure Service in the source account needs a Viewer authorization on
+# the BRS instance before the VPEG can be created.
+#
+# Policy model (created in the TARGET / BRS account):
+#   Subject  : VPC Infrastructure Services / endpoint-gateway  in source account
+#   Resource : backup-recovery instance GUID
+#   Role     : Viewer
+#
+# For same-account deployments (brs_source_account_id == null) this module
+# creates no resources (service_map is empty).
+module "brs_s2s_auth" {
+  count   = var.create_brs_vpe && var.brs_source_account_id != null ? 1 : 0
+  source  = "terraform-ibm-modules/s2s-auth/ibm"
+  version = "2.3.1"
+
+  enable_cbr = false
+
+  service_map = {
+    "brs-vpe-source-to-brs-target" = {
+      # Source: VPC Infrastructure Services / endpoint-gateway in the SOURCE account
+      source_service_name       = "is"
+      source_resource_type      = "endpoint-gateway"
+      source_service_account_id = var.brs_source_account_id
+
+      # Target: the specific BRS instance in this (TARGET) account
+      target_service_name         = "backup-recovery"
+      target_resource_instance_id = local.brs_instance_guid
+
+      roles       = ["Viewer"]
+      description = "Allow VPC endpoint-gateway in account ${var.brs_source_account_id} to target BRS instance ${local.brs_instance_guid}"
+    }
+  }
+
+  depends_on = [module.backup_recovery_instance]
+}
+
+##############################################################################
+# Virtual Private Endpoint Gateway for BRS
+##############################################################################
+
+# Resolve the VPC name from the cluster's worker-pool data source so the VPEG
+# module can generate a stable, deterministic name without requiring a separate
+# ibm_is_vpc data source lookup.
+locals {
+  # vpc_name is used only in the VPE name template; fall back to the vpc_id
+  # short-suffix when the worker pool data is unavailable (classic clusters).
+  brs_vpe_vpc_name = local.is_vpc ? data.ibm_container_vpc_worker_pool.pool[0].vpc_id : "vpc"
+
+  # After the VPEG is created the module exposes a map of gateway → reserved IPs.
+  # Each IP has a .address (the private IP) and the DNS name is the canonical
+  # VPE hostname: <instance-guid>.private.<region>.backup-recovery.cloud.ibm.com
+  # We derive the hostname directly from the BRS instance CRN so it is known at
+  # plan time (no dependency on VPEG output for the local value used by resources
+  # that only need the hostname string, e.g. the BRS provider config).
+  brs_vpe_hostname = var.create_brs_vpe ? "${local.brs_instance_guid}.private.${local.brs_instance_region}.backup-recovery.cloud.ibm.com" : local.backup_recovery_instance_private_url
+}
+
+module "brs_vpe" {
+  count   = var.create_brs_vpe && local.is_vpc ? 1 : 0
+  source  = "terraform-ibm-modules/vpe-gateway/ibm"
+  version = "5.3.5"
+
+  region            = local.brs_instance_region
+  prefix            = var.brs_vpe_name != null ? var.brs_vpe_name : "brs"
+  vpc_name          = local.brs_vpe_vpc_name
+  vpc_id            = var.vpc_id
+  subnet_zone_list  = var.vpc_subnets
+  resource_group_id = var.cluster_resource_group_id
+
+  # Attach to the Kubernetes VPEG security group (kube-vpegw-<vpc-id>).
+  # IKS/ROKS automatically creates this SG on every VPC cluster and it is
+  # pre-configured to allow the cluster worker nodes to reach VPE targets.
+  security_group_ids = [data.ibm_is_security_group.kube_vpeg_sg[0].id]
+
+  # Target the BRS instance by CRN. resource_type is "provider_cloud_service"
+  # for a CRN that contains at least 7 colon-separated segments.
+  cloud_service_by_crn = [
+    {
+      crn          = module.backup_recovery_instance.brs_instance_crn
+      service_name = "backup-recovery"
+      vpe_name     = var.brs_vpe_name != null ? var.brs_vpe_name : null
+    }
+  ]
+
+  depends_on = [module.brs_s2s_auth]
+}
+
+# Fetch the kube-vpegw-<vpc-id> security group that IKS/ROKS creates on every
+# VPC cluster. It is pre-scoped to allow cluster nodes to reach VPE endpoints.
+data "ibm_is_security_group" "kube_vpeg_sg" {
+  count = var.create_brs_vpe && local.is_vpc ? 1 : 0
+  name  = "kube-vpegw-${var.vpc_id}"
 }
 
 ##############################################################################

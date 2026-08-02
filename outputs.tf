@@ -85,3 +85,8 @@ output "brs_tags" {
   description = "BRS tags that should be added to the cluster to prevent tag drift. Include these in your cluster's tags input."
   value       = ["brs-region:${local.brs_instance_region}", "brs-guid:${local.brs_instance_guid}"]
 }
+
+output "brs_vpe_ips" {
+  description = "Map of VPEG name to reserved IP list. Populated only when create_brs_vpe = true; empty map otherwise. Each entry contains the private IPs bound to each subnet zone."
+  value       = var.create_brs_vpe && local.is_vpc ? module.brs_vpe[0].vpe_ips : {}
+}
