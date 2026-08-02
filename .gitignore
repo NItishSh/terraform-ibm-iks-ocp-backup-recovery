@@ -81,3 +81,4 @@ job-logs.txt
 run_tests_local.sh
 cleanup-test-resources.sh
 .env
+terraform.tfvars
