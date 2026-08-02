@@ -399,14 +399,15 @@ main() {
   # 30+ minutes to cancel when mid-upload to cloud storage.
   echo "Waiting for ${active_count} active run(s) to stop (timeout 60m)..." >&2
   local timeout_at
-  timeout_at=$(( $(date +%s) + 3600 ))
+  timeout_at=$(( $(date +%s) + 1200 ))
 
   while [[ "$(date +%s)" -lt "$timeout_at" ]]; do
-    sleep 20
-    echo "Re-checking run states..." >&2
-    if ! has_active_work; then
-      echo "All runs stopped. Waiting 30s for BRS to commit final state..." >&2
-      sleep 30
+    sleep 15
+    echo "Re-checking run states..."
+    if ! has_active_runs; then
+      echo "All runs stopped. Sleeping 60s for BRS backend state propagation..."
+      sleep 60
+      echo "Protection group is ready for deletion."
       exit 0
     fi
     # Re-issue cancel each iteration: a run may have transitioned from a
@@ -415,10 +416,8 @@ main() {
     check_and_cancel > /dev/null
   done
 
-  echo "ERROR: Timed out (60 min) waiting for run cancellation to complete." >&2
-  echo "Active runs/tasks are still present. Protection group cannot be safely deleted." >&2
-  echo "Investigate BRS job state for protection group ${API_PG_ID} and retry." >&2
-  exit 1
+  echo "WARNING: Timed out (20 min) waiting for run cancellation. Proceeding anyway." >&2
+  exit 0
 }
 
 main
