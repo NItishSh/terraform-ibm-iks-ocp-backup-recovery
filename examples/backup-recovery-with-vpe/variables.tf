@@ -1,63 +1,77 @@
 variable "ibmcloud_api_key" {
   type        = string
-  description = "IBM Cloud API key used to authenticate with the IBM Cloud platform."
+  description = "The IBM Cloud API Key."
   sensitive   = true
 }
 
 variable "region" {
   type        = string
-  description = "IBM Cloud region where the cluster and BRS instance are located."
-  default     = "us-south"
+  description = "Region where resources are created."
+  default     = "us-east"
 }
 
 variable "prefix" {
   type        = string
-  description = "Prefix to prepend to all provisioned resources."
-  default     = "brs-vpe"
+  description = "Prefix for name of all resources created by this example."
+  validation {
+    error_message = "Prefix must begin and end with a letter and contain only letters, numbers, and - characters."
+    condition     = can(regex("^([A-z]|[a-z][-a-z0-9]*[a-z0-9])$", var.prefix))
+  }
 }
 
 variable "resource_group" {
   type        = string
-  description = "Name of an existing resource group to use. If null, a new resource group is created."
+  description = "An existing resource group name to use for this example. If null, a new resource group is created."
   default     = null
 }
 
-variable "cluster_id" {
+variable "cluster_name_id" {
   type        = string
-  description = "ID or name of the IKS/ROKS VPC cluster to protect."
+  description = <<EOT
+Name or ID of an existing IKS VPC cluster to protect.
+If null (default), this example creates a new VPC and IKS cluster automatically.
+If provided, the example uses that existing cluster and no new VPC or cluster resources are created.
+EOT
+  default     = null
 }
 
 variable "vpc_id" {
   type        = string
-  description = "ID of the VPC where the cluster is deployed. Used to look up subnets for the BRS VPE gateway."
-}
-
-variable "kube_type" {
-  type        = string
-  description = "Type of Kubernetes cluster: 'openshift' or 'kubernetes'."
-  default     = "kubernetes"
+  description = "ID of the VPC where the existing cluster is deployed. Required when cluster_name_id is provided, so the VPEG and subnet discovery can locate the correct VPC. Leave null when letting this example create a new cluster (vpc_id is derived automatically in that case)."
+  default     = null
 }
 
 variable "existing_brs_instance_crn" {
   type        = string
-  description = "CRN of an existing BRS instance. If null, a new BRS instance is created in the cluster's region."
+  description = "CRN of an existing BRS instance to use. If null, a new BRS instance is created in the cluster's region."
   default     = null
 }
 
 variable "brs_source_account_id" {
   type        = string
-  description = "Account ID of the IBM Cloud account that owns the cluster VPC. Set this only for cross-account deployments where the BRS instance is in a different account than the cluster. When set, an S2S IAM authorization policy is created. Leave null for same-account deployments."
+  description = "IBM Cloud account ID of the account that owns the cluster VPC. Set this only for cross-account deployments where the BRS instance lives in a different IBM Cloud account than the cluster. When set, an S2S IAM authorization policy is created (apply from the BRS/target account). Leave null for same-account deployments."
   default     = null
+}
+
+variable "cluster_config_endpoint_type" {
+  type        = string
+  description = "The type of endpoint to use for cluster config access: 'default', 'private', 'vpe', or 'link'."
+  default     = "default"
+
+  validation {
+    condition     = contains(["default", "private", "vpe", "link"], var.cluster_config_endpoint_type)
+    error_message = "`cluster_config_endpoint_type` must be 'default', 'private', 'vpe', or 'link'."
+  }
 }
 
 variable "resource_tags" {
   type        = list(string)
-  description = "Optional list of user tags to attach to all provisioned resources."
+  description = "Optional list of tags to attach to all provisioned resources."
   default     = []
 }
 
 variable "access_tags" {
   type        = list(string)
-  description = "Optional list of access management tags to attach to all provisioned resources."
+  description = "A list of access management tags to apply to all provisioned resources."
   default     = []
 }
