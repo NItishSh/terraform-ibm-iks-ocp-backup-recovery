@@ -18,6 +18,12 @@ variable "cluster_resource_group_id" {
   type        = string
 }
 
+variable "brs_resource_group_id" {
+  description = "Resource group ID in which to create the BRS instance. Defaults to `cluster_resource_group_id` when null (same-account deployments). Set this to a resource group in the target account when the BRS instance lives in a different IBM Cloud account from the cluster."
+  type        = string
+  default     = null
+}
+
 variable "cluster_config_endpoint_type" {
   description = "The type of endpoint to use for the cluster config access: `default`, `private`, `vpe`, or `link`. The `default` value uses the default endpoint of the cluster."
   type        = string

@@ -281,6 +281,11 @@ module "backup_recovery" {
   enable_auto_protect          = false
 
   # ---- BRS instance (target account) ----
+  # brs_resource_group_id points at the TARGET-account resource group so the
+  # BRS instance is created in the correct account. Without this, the root
+  # module would fall back to cluster_resource_group_id which belongs to the
+  # source account, causing the BRS instance to land in the wrong account.
+  brs_resource_group_id     = module.target_resource_group.resource_group_id
   existing_brs_instance_crn = var.existing_brs_instance_crn
   brs_instance_name         = "${var.prefix}-brs"
   brs_connection_name       = "${var.prefix}-brs-connection"

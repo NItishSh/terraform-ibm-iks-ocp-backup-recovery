@@ -91,7 +91,7 @@ module "backup_recovery_instance" {
   source                    = "terraform-ibm-modules/backup-recovery/ibm"
   version                   = "1.12.3"
   region                    = local.brs_region
-  resource_group_id         = var.cluster_resource_group_id
+  resource_group_id         = var.brs_resource_group_id != null ? var.brs_resource_group_id : var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
   instance_name             = var.brs_instance_name
   existing_brs_instance_crn = var.existing_brs_instance_crn != "null" && var.existing_brs_instance_crn != "" ? var.existing_brs_instance_crn : null
