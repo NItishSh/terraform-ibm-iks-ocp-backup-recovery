@@ -21,7 +21,7 @@ It automates:
 
 For detailed guidance on configuring Kubernetes Protection Groups, including limitations, best practices, and working examples, see:
 
-**[Protection Group Configuration Guide](./ProtectionGroup.md)**
+**[Protection Group Configuration Guide](./docs/PROTECTION_GROUP.md)**
 
 <!-- BEGIN OVERVIEW HOOK -->
 ## Overview

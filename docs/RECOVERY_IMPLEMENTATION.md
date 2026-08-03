@@ -561,7 +561,7 @@ ibmcloud backup-recovery recovery get \
 - [IBM Backup Recovery Documentation](https://cloud.ibm.com/docs/backup-recovery)
 - [Terraform IBM Provider Documentation](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs)
 - [Module README](./README.md)
-- [Protection Group Configuration Guide](./ProtectionGroup.md)
+- [Protection Group Configuration Guide](./PROTECTION_GROUP.md)
 
 ---
 
