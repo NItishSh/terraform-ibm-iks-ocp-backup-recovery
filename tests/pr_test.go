@@ -32,11 +32,20 @@ var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "c
 
 var includeFiletypes = []string{".tf", ".yaml", ".py", ".tpl", ".md", ".sh"}
 
-// Current supported regions
+// Current supported regions — keep this list >= number of parallel tests (6)
+// to minimise same-region collisions, which slow down IKS cluster provisioning
+// and can push total wall-clock time over the GitHub Actions job limit.
 var validRegions = []string{
 	"us-south",
 	"us-east",
 	"eu-es",
+	"eu-gb",
+	"eu-de",
+	"au-syd",
+	"br-sao",
+	"ca-tor",
+	"jp-osa",
+	"jp-tok",
 }
 
 type tarIncludePatterns struct {
