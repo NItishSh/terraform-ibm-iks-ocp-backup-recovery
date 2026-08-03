@@ -35,12 +35,6 @@ EOT
   default     = null
 }
 
-variable "vpc_id" {
-  type        = string
-  description = "ID of the VPC where the existing cluster is deployed. Required when cluster_name_id is provided, so the VPEG and subnet discovery can locate the correct VPC. Leave null when letting this example create a new cluster (vpc_id is derived automatically in that case)."
-  default     = null
-}
-
 variable "existing_brs_instance_crn" {
   type        = string
   description = "CRN of an existing BRS instance to use. If null, a new BRS instance is created in the cluster's region."

@@ -50,7 +50,11 @@ locals {
 }
 
 module "protect_cluster" {
-  source                       = "../.."
+  source = "../.."
+  providers = {
+    ibm         = ibm
+    ibm.cluster = ibm
+  }
   cluster_id                   = var.cluster_id
   cluster_resource_group_id    = var.cluster_resource_group_id
   cluster_config_endpoint_type = var.cluster_config_endpoint_type
@@ -161,8 +165,10 @@ module "target_cluster_registration" {
   source = "../.."
 
   providers = {
-    helm       = helm.target
-    kubernetes = kubernetes.target
+    ibm         = ibm
+    ibm.cluster = ibm
+    helm        = helm.target
+    kubernetes  = kubernetes.target
   }
 
   cluster_id                   = var.target_cluster_id

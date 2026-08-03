@@ -110,7 +110,8 @@ module "backup_recovery_instance" {
 ##############################################################################
 
 data "ibm_container_vpc_cluster" "vpc_cluster" {
-  count = local.is_vpc ? 1 : 0
+  count    = local.is_vpc ? 1 : 0
+  provider = ibm.cluster
 
   name              = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
@@ -119,7 +120,8 @@ data "ibm_container_vpc_cluster" "vpc_cluster" {
 }
 
 data "ibm_container_cluster" "classic_cluster" {
-  count = local.is_classic ? 1 : 0
+  count    = local.is_classic ? 1 : 0
+  provider = ibm.cluster
 
   name              = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
@@ -128,6 +130,8 @@ data "ibm_container_cluster" "classic_cluster" {
 }
 
 data "ibm_container_cluster_config" "cluster_config" {
+  provider = ibm.cluster
+
   cluster_name_id   = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   config_dir        = "${path.module}/kubeconfig"
@@ -143,10 +147,61 @@ data "ibm_container_cluster_config" "cluster_config" {
 }
 
 data "ibm_container_vpc_worker_pool" "pool" {
-  count = local.is_vpc ? 1 : 0
+  count    = local.is_vpc ? 1 : 0
+  provider = ibm.cluster
 
   cluster          = data.ibm_container_vpc_cluster.vpc_cluster[0].id
   worker_pool_name = data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[0].name
+}
+
+##############################################################################
+# VPC + Subnet auto-discovery  (used when create_brs_vpe = true)
+#
+# ibm_container_vpc_cluster does not export vpc_id as a top-level attribute.
+# We flatten all subnet IDs from worker_pools -> zones -> subnets, look each
+# up via ibm_is_subnet (one per subnet, all IDs known at plan time from the
+# worker_pool splat), then use the first result to derive the VPC ID.
+# Users no longer need to supply vpc_id or vpc_subnets when create_brs_vpe = true.
+##############################################################################
+
+locals {
+  # All subnet IDs attached to the cluster's worker pools.
+  # For classic clusters is_vpc is false, so this will be [].
+  cluster_subnet_ids = local.is_vpc ? flatten(
+    data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[*].zones[*].subnets[*].id
+  ) : []
+
+  # Only look up cluster subnets when we need them AND there are some.
+  # try() guards against an empty list before the count guard fires.
+  cluster_subnet_lookup_count = var.create_brs_vpe && local.is_vpc && length(local.cluster_subnet_ids) > 0 ? length(local.cluster_subnet_ids) : 0
+}
+
+# Look up every cluster subnet individually.
+# The IDs come from worker_pools splat and are known at plan time, so the
+# count is static and Terraform can plan correctly without a two-phase apply.
+data "ibm_is_subnet" "cluster_subnet" {
+  count      = local.cluster_subnet_lookup_count
+  provider   = ibm.cluster
+  identifier = local.cluster_subnet_ids[count.index]
+}
+
+locals {
+  # VPC ID: user-supplied takes precedence; auto-derived from the first
+  # cluster subnet lookup otherwise.
+  resolved_vpc_id = var.vpc_id != null ? var.vpc_id : (
+    local.cluster_subnet_lookup_count > 0 ? data.ibm_is_subnet.cluster_subnet[0].vpc : null
+  )
+
+  # Subnet list: user-supplied takes precedence; built from the per-subnet
+  # lookups otherwise.  All values (name, id, zone) are known after the
+  # ibm_is_subnet reads, which are all apply-time but the keys are static.
+  resolved_vpc_subnets = length(var.vpc_subnets) > 0 ? var.vpc_subnets : (
+    local.cluster_subnet_lookup_count > 0 ? [for s in data.ibm_is_subnet.cluster_subnet : {
+      name = s.name
+      id   = s.id
+      zone = s.zone
+    }] : []
+  )
 }
 
 ##############################################################################
@@ -156,8 +211,11 @@ data "ibm_container_vpc_worker_pool" "pool" {
 module "dsc_sg_rule" {
   count = var.add_dsc_rules_to_cluster_sg && local.is_vpc ? 1 : 0
 
-  source                       = "terraform-ibm-modules/security-group/ibm"
-  version                      = "v2.9.1"
+  source  = "terraform-ibm-modules/security-group/ibm"
+  version = "v2.9.1"
+  providers = {
+    ibm = ibm.cluster
+  }
   resource_group               = var.cluster_resource_group_id
   existing_security_group_name = "kube-${var.cluster_id}"
   use_existing_security_group  = true
@@ -239,15 +297,18 @@ module "brs_s2s_auth" {
 # module can generate a stable, deterministic name without requiring a separate
 # ibm_is_vpc data source lookup.
 locals {
-  # vpc_name is used only in the VPE name template; fall back to the vpc_id
-  # short-suffix when the worker pool data is unavailable (classic clusters).
-  brs_vpe_vpc_name = local.is_vpc ? data.ibm_container_vpc_worker_pool.pool[0].vpc_id : "vpc"
+  # vpc_name is used only in the VPE name template.
+  # Use the auto-resolved VPC ID (never unknown at the point this is used).
+  brs_vpe_vpc_name = local.is_vpc ? local.resolved_vpc_id : "vpc"
 }
 
 module "brs_vpe" {
   count   = var.create_brs_vpe && local.is_vpc ? 1 : 0
   source  = "terraform-ibm-modules/vpe-gateway/ibm"
   version = "5.3.5"
+  providers = {
+    ibm = ibm.cluster
+  }
 
   # Use var.region (the cluster's region, always known at plan time) rather than
   # local.brs_instance_region (derived from the BRS CRN, unknown until apply).
@@ -256,8 +317,8 @@ module "brs_vpe" {
   region            = var.region
   prefix            = var.brs_vpe_name != null ? var.brs_vpe_name : "brs"
   vpc_name          = local.brs_vpe_vpc_name
-  vpc_id            = var.vpc_id
-  subnet_zone_list  = var.vpc_subnets
+  vpc_id            = local.resolved_vpc_id
+  subnet_zone_list  = local.resolved_vpc_subnets
   resource_group_id = var.cluster_resource_group_id
 
   # Attach to the Kubernetes VPEG security group (kube-vpegw-<vpc-id>).
@@ -283,8 +344,9 @@ module "brs_vpe" {
 # Fetch the kube-vpegw-<vpc-id> security group that IKS/ROKS creates on every
 # VPC cluster. It is pre-scoped to allow cluster nodes to reach VPE endpoints.
 data "ibm_is_security_group" "kube_vpeg_sg" {
-  count = var.create_brs_vpe && local.is_vpc ? 1 : 0
-  name  = "kube-vpegw-${var.vpc_id}"
+  count    = var.create_brs_vpe && local.is_vpc ? 1 : 0
+  provider = ibm.cluster
+  name     = "kube-vpegw-${local.resolved_vpc_id}"
 }
 
 ##############################################################################
@@ -307,7 +369,8 @@ locals {
 }
 
 resource "ibm_container_vpc_worker_pool" "data_source_connector" {
-  count = local.is_vpc && var.create_dsc_worker_pool ? local.num_zones : 0
+  count    = local.is_vpc && var.create_dsc_worker_pool ? local.num_zones : 0
+  provider = ibm.cluster
 
   cluster           = data.ibm_container_vpc_cluster.vpc_cluster[0].id
   worker_pool_name  = "dsc-pool-zone-${count.index + 1}"
@@ -1168,7 +1231,8 @@ resource "terraform_data" "cancel_pg_runs" {
 # Adds BRS tags to identify which instance is protecting this cluster.
 # Set add_cluster_tags = false to prevent tag drift when cluster tags are managed externally.
 resource "ibm_resource_tag" "cluster_brs_tag" {
-  count = var.add_cluster_tags ? 1 : 0
+  count    = var.add_cluster_tags ? 1 : 0
+  provider = ibm.cluster
 
   resource_id = local.cluster_crn
   tag_type    = "user"

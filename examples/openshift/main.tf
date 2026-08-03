@@ -172,7 +172,11 @@ resource "time_sleep" "wait_operators" {
 
 
 module "backup_recover_protect_ocp" {
-  source                       = "../.."
+  source = "../.."
+  providers = {
+    ibm         = ibm
+    ibm.cluster = ibm
+  }
   cluster_id                   = local.cluster_id
   cluster_resource_group_id    = module.resource_group.resource_group_id
   cluster_config_endpoint_type = var.cluster_config_endpoint_type

@@ -27,6 +27,7 @@ const fullyConfigurableTerraformDir = "solutions/fully-configurable"
 const iksExampleDir = "examples/kubernetes"
 const ocpExampleDir = "examples/openshift"
 const crossClusterExampleDir = "examples/backup-recovery-cross-cluster"
+const vpeExampleDir = "examples/backup-recovery-with-vpe"
 
 var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "common-dev-assets", "examples", "tests", "reference-architectures"}
 
@@ -321,6 +322,11 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// source_registration is updated in-place on upgrade because the new
 			// module version registers updated image versions against the same source.
 			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
+			// Provider binding changes from ibm → ibm.cluster for cluster-side managed
+			// resources. This is a metadata-only in-place update introduced by the
+			// dual-provider alias change in this PR; no resource is replaced.
+			"module.protect_cluster.ibm_resource_tag.cluster_brs_tag[0]",
+			"module.protect_cluster.ibm_container_vpc_worker_pool.data_source_connector[0]",
 			// brs_source_deregistration_wait destroy_duration changed from 5m
 			// to 15m — in-place update, no resource replacement.
 			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
@@ -406,6 +412,28 @@ func TestRunOCPExample(t *testing.T) {
 	// 	o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-refresh=false")
 	// 	return nil
 	// }
+
+	output, err := options.RunTestConsistency()
+	assert.NoError(t, err, "This should not have errored")
+	assert.NotNil(t, output, "Expected some output")
+}
+
+func TestRunVPEExample(t *testing.T) {
+	t.Parallel()
+
+	options := setupOptions(t, "brs-vpe", vpeExampleDir, []string{
+		// source_registration churns because the registration token rotates by design;
+		// the consistency-plan will always show an in-place update here.
+		"module.backup_recovery.ibm_backup_recovery_source_registration.source_registration",
+		// cluster creation resource; tag drift causes spurious updates on consistency plan.
+		"ibm_container_vpc_cluster.vpc_cluster[0]",
+	})
+
+	// parallelism=1 on destroy prevents VPC removal from racing worker-node cleanup.
+	options.PreDestroyHook = func(o *testhelper.TestOptions) error {
+		o.TerraformOptions.ExtraArgs.Destroy = append(o.TerraformOptions.ExtraArgs.Destroy, "-parallelism=1")
+		return nil
+	}
 
 	output, err := options.RunTestConsistency()
 	assert.NoError(t, err, "This should not have errored")

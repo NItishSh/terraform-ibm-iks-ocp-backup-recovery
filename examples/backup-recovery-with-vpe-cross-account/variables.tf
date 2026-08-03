@@ -70,12 +70,6 @@ variable "cluster_name_id" {
   default     = null
 }
 
-variable "vpc_id" {
-  type        = string
-  description = "ID of the VPC (in the source account) where the existing cluster is deployed. Required when cluster_name_id is provided."
-  default     = null
-}
-
 variable "cluster_config_endpoint_type" {
   type        = string
   description = "Cluster config endpoint type: 'default', 'private', 'vpe', or 'link'."

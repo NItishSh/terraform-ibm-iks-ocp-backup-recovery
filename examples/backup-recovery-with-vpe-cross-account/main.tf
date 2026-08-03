@@ -33,15 +33,25 @@ locals {
   # cluster_id: existing cluster name/ID or newly created cluster ID.
   cluster_id = var.cluster_name_id != null ? data.ibm_container_vpc_cluster.vpc_cluster_data[0].name : ibm_container_vpc_cluster.vpc_cluster[0].id
 
-  # vpc_id: from new VPC resource when creating a cluster, or from the
-  # user-supplied variable when using an existing cluster.
-  vpc_id = var.cluster_name_id != null ? var.vpc_id : ibm_is_vpc.vpc[0].id
+  # Flatten all subnet IDs out of worker_pools -> zones -> subnets for an
+  # existing cluster. These IDs come from the cluster data source and are
+  # known at plan time, so the for_each count in ibm_is_subnet is static.
+  existing_cluster_subnet_ids = var.cluster_name_id != null ? flatten(
+    data.ibm_container_vpc_cluster.vpc_cluster_data[0].worker_pools[*].zones[*].subnets[*].id
+  ) : []
 
-  # vpc_subnets: built statically from var.prefix / var.region so the
-  # for_each keys in the VPEG module are known at plan time.
-  # When using an existing cluster the user must supply vpc_id; the
-  # existing-subnets data source discovers subnets by VPC.
-  vpc_subnets = var.cluster_name_id != null ? [for s in data.ibm_is_subnets.existing_subnets[0].subnets : {
+  # Number of per-subnet lookups to perform for existing clusters.
+  existing_subnet_lookup_count = var.cluster_name_id != null ? length(local.existing_cluster_subnet_ids) : 0
+
+  # vpc_id: from new VPC resource when creating a cluster, or resolved via
+  # the first per-subnet lookup of the existing cluster (no user input needed).
+  vpc_id = var.cluster_name_id != null ? data.ibm_is_subnet.cluster_subnet[0].vpc : ibm_is_vpc.vpc[0].id
+
+  # vpc_subnets: for a new cluster, one static subnet from the IKS resource.
+  # For an existing cluster, built from the per-subnet lookups — all keys
+  # (name, id, zone) are known at apply time; the for_each key in module.brs_vpe
+  # is set explicitly via vpe_name so plan is still deterministic.
+  vpc_subnets = var.cluster_name_id != null ? [for s in data.ibm_is_subnet.cluster_subnet : {
     name = s.name
     id   = s.id
     zone = s.zone
@@ -151,11 +161,13 @@ data "ibm_container_vpc_cluster" "vpc_cluster_data" {
   resource_group_id = module.source_resource_group.resource_group_id
 }
 
-# Discover subnets in the existing cluster's VPC for VPEG reserved IPs.
-data "ibm_is_subnets" "existing_subnets" {
-  count    = var.cluster_name_id != null ? 1 : 0
-  provider = ibm.source
-  vpc      = var.vpc_id
+# Look up every subnet of the existing cluster individually.
+# The IDs come from worker_pools splat and are known at plan time, so the
+# count is static and avoids the unknown-at-plan-time problem of ibm_is_subnets.
+data "ibm_is_subnet" "cluster_subnet" {
+  count      = local.existing_subnet_lookup_count
+  provider   = ibm.source
+  identifier = local.existing_cluster_subnet_ids[count.index]
 }
 
 ##############################################################################
@@ -244,17 +256,18 @@ module "brs_s2s_auth" {
 
 module "backup_recovery" {
   source = "../.."
-  # default ibm provider (target account) for BRS resources
+  # BRS resources (ibm_backup_recovery_*, ibm_resource_instance, S2S policy)
+  # use the default ibm provider → target (BRS) account.
+  # Cluster/VPC resources (ibm_container_*, ibm_is_*, ibm_resource_tag on cluster)
+  # use ibm.cluster → source account, via the ibm.source alias defined in provider.tf.
+  providers = {
+    ibm         = ibm        # target account  — BRS instance, connection, S2S auth
+    ibm.cluster = ibm.source # source account  — cluster data sources, DSC worker pool, tags
+  }
 
   depends_on = [time_sleep.wait_operators]
 
   # ---- Cluster (source account) ----
-  # The root module reads these via ibm_container_vpc_cluster data sources.
-  # Since the default provider is the target account, we must ensure the
-  # cluster is accessible from the target account API key, OR use an
-  # existing cluster whose ID is known.  For simplicity this example
-  # always provisions or references a cluster in the source account and
-  # passes the cluster ID (already resolved above via ibm.source).
   cluster_id                   = local.cluster_id
   cluster_resource_group_id    = module.source_resource_group.resource_group_id
   cluster_config_endpoint_type = var.cluster_config_endpoint_type

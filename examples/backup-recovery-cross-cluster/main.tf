@@ -310,8 +310,10 @@ resource "terraform_data" "wait_for_source_workload" {
 module "source_backup_recovery" {
   source = "../.."
   providers = {
-    helm       = helm.source
-    kubernetes = kubernetes.source
+    ibm         = ibm
+    ibm.cluster = ibm
+    helm        = helm.source
+    kubernetes  = kubernetes.source
   }
 
   cluster_id                   = local.source_cluster_id
@@ -396,8 +398,10 @@ module "source_backup_recovery" {
 module "target_backup_recovery" {
   source = "../.."
   providers = {
-    helm       = helm.target
-    kubernetes = kubernetes.target
+    ibm         = ibm
+    ibm.cluster = ibm
+    helm        = helm.target
+    kubernetes  = kubernetes.target
   }
 
   cluster_id                   = local.target_cluster_id

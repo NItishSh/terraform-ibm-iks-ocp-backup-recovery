@@ -234,13 +234,13 @@ variable "create_brs_vpe" {
 }
 
 variable "vpc_id" {
-  description = "ID of the VPC where the BRS Virtual Private Endpoint Gateway will be created. Required when create_brs_vpe is true."
+  description = "ID of the VPC where the BRS Virtual Private Endpoint Gateway will be created. Optional when create_brs_vpe is true — when omitted the VPC ID is auto-discovered from the cluster's worker-pool subnets. Supply this explicitly only when the auto-discovery would pick the wrong VPC."
   type        = string
   default     = null
 }
 
 variable "vpc_subnets" {
-  description = "List of subnets (one per zone) in which to bind reserved IPs for the BRS VPE Gateway. Each entry must have 'name', 'id', and 'zone'. Required when create_brs_vpe is true. Use the subnet_zone_list output from terraform-ibm-landing-zone-vpc or equivalent."
+  description = "List of subnets in which to bind reserved IPs for the BRS VPE Gateway. Each entry must have 'name', 'id', and 'zone'. Optional when create_brs_vpe is true — when omitted all subnets in the cluster VPC are discovered automatically. Supply this explicitly to restrict the VPEG to a specific subset of subnets."
   type = list(object({
     name = string
     id   = string

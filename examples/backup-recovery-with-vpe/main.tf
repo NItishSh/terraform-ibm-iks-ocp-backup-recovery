@@ -27,25 +27,6 @@
 locals {
   # cluster_id resolves to the newly-created cluster ID or the existing one.
   cluster_id = var.cluster_name_id != null ? data.ibm_container_vpc_cluster.vpc_cluster_data[0].name : ibm_container_vpc_cluster.vpc_cluster[0].id
-
-  # VPC ID: from the newly-created VPC resource when creating a cluster,
-  # or from the user-supplied vpc_id variable when using an existing cluster.
-  vpc_id = var.cluster_name_id != null ? var.vpc_id : ibm_is_vpc.vpc[0].id
-
-  # Subnets: from the newly-created subnet when creating a cluster, or
-  # discovered from the VPC via ibm_is_subnets when using an existing cluster.
-  vpc_subnets = var.cluster_name_id != null ? [for s in data.ibm_is_subnets.existing_subnets[0].subnets : {
-    name = s.name
-    id   = s.id
-    zone = s.zone
-    }] : [{
-    # Use var.region directly so zone is known at plan time. The subnet resource
-    # always places zone_1 in "${var.region}-1", but reading it back from the
-    # resource attribute would yield an unknown value during planning.
-    name = "${var.prefix}-subnet-1"
-    id   = ibm_is_subnet.subnet_zone_1[0].id
-    zone = "${var.region}-1"
-  }]
 }
 
 ##############################################################################
@@ -122,13 +103,6 @@ data "ibm_container_vpc_cluster" "vpc_cluster_data" {
   resource_group_id = module.resource_group.resource_group_id
 }
 
-# Discover all subnets in the existing cluster's VPC so the VPEG module can
-# bind a reserved IP in each zone.
-data "ibm_is_subnets" "existing_subnets" {
-  count = var.cluster_name_id != null ? 1 : 0
-  vpc   = var.vpc_id
-}
-
 ##############################################################################
 # Cluster kubeconfig
 ##############################################################################
@@ -151,6 +125,10 @@ resource "time_sleep" "wait_operators" {
 
 module "backup_recovery" {
   source = "../.."
+  providers = {
+    ibm         = ibm
+    ibm.cluster = ibm
+  }
 
   depends_on = [time_sleep.wait_operators]
 
@@ -183,10 +161,10 @@ module "backup_recovery" {
   # creates a VPE Gateway in the cluster VPC so that private hostname resolves
   # to a VPC-internal IP — routing DSC↔BRS traffic through the IBM backbone
   # instead of the IBM Cloud Service Endpoint (CSE).
-  brs_endpoint_type     = "public" # Terraform uses public; DSC traffic routes via VPE automatically
-  create_brs_vpe        = true
-  vpc_id                = local.vpc_id
-  vpc_subnets           = local.vpc_subnets
+  brs_endpoint_type = "public" # Terraform uses public; DSC traffic routes via VPE automatically
+  create_brs_vpe    = true
+  # vpc_id and vpc_subnets are intentionally omitted — the root module
+  # auto-discovers both from the cluster's worker-pool subnets.
   brs_source_account_id = var.brs_source_account_id # null = same-account
 
   # ---- Backup policy ----
