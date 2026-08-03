@@ -216,31 +216,30 @@ module "brs_s2s_auth" {
 }
 
 ##############################################################################
-# BRS backup & recovery module  (default provider = target account for BRS
-#   resources; source provider passed for cluster / VPC / VPEG resources)
+# BRS backup & recovery module  (default provider = target account)
 #
-# Design note
-# -----------
-# The root module (../.. ) uses the DEFAULT ibm provider for ALL resources:
-#   - ibm_resource_instance / ibm_backup_recovery_* → must be target account ✓
-#   - ibm_container_vpc_cluster data sources          → must be source account ✗
-#   - ibm_is_virtual_endpoint_gateway (VPEG)          → must be source account ✗
+# Design note — why VPEG and S2S auth live outside the root module
+# -----------------------------------------------------------------
+# The root module (../.. ) uses a SINGLE ibm provider alias for every
+# resource it creates:
+#   - ibm_resource_instance / ibm_backup_recovery_* → target account  ✓
+#   - ibm_container_vpc_cluster data sources         → source account  ✗
+#   - ibm_is_virtual_endpoint_gateway (VPEG)         → source account  ✗
 #
-# Because a single module call cannot fan-out to two different IBM provider
-# aliases, we split the concerns:
-#   - The root module runs with the DEFAULT provider (target account).
-#     We pass brs_source_account_id = null so the module does NOT try to
-#     create the S2S auth (we create it above, explicitly in the target
-#     account).  create_brs_vpe = true is still passed so the VPEG is
-#     created — BUT the VPEG resource inside the module also uses the
-#     default provider.  This means the VPEG is created in the TARGET
-#     account's VPC context, which is wrong for true cross-account.
+# A Terraform module call cannot fan resources out across two provider
+# aliases, so we split responsibilities:
 #
-# WORKAROUND applied in this example:
-#   We set create_brs_vpe = false on the root module and create the VPEG
-#   directly below using ibm.source, pointing it at the BRS CRN output
-#   from the module.  The S2S auth (above) is created separately in the
-#   target account.
+#   Root module (../..):
+#     create_brs_vpe = false   — no VPEG created inside the module
+#     brs_source_account_id = null  — no S2S auth inside the module
+#     Default ibm provider (target account) creates BRS instance +
+#     connection + protection policy.
+#
+#   This example (outside the module):
+#     module.brs_s2s_auth  — creates the cross-account IAM policy
+#                            using the default ibm provider (target account)
+#     module.brs_vpe       — creates the VPEG in the source-account VPC
+#                            using ibm.source provider
 ##############################################################################
 
 module "backup_recovery" {
@@ -281,7 +280,7 @@ module "backup_recovery" {
 
   # VPEG is created separately below (ibm.source) to place it in the
   # correct source-account VPC.  The S2S auth is created above.
-  create_brs_vpe        = false
+  create_brs_vpe        = false # IMPORT_PLACEHOLDER
   brs_source_account_id = null
 
   # ---- Backup policy ----
