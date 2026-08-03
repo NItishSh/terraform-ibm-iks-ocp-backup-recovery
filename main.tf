@@ -249,7 +249,11 @@ module "brs_vpe" {
   source  = "terraform-ibm-modules/vpe-gateway/ibm"
   version = "5.3.5"
 
-  region            = local.brs_instance_region
+  # Use var.region (the cluster's region, always known at plan time) rather than
+  # local.brs_instance_region (derived from the BRS CRN, unknown until apply).
+  # The VPE is always co-located with the cluster; the BRS instance region only
+  # diverges when using cross-region replication (not supported here).
+  region            = var.region
   prefix            = var.brs_vpe_name != null ? var.brs_vpe_name : "brs"
   vpc_name          = local.brs_vpe_vpc_name
   vpc_id            = var.vpc_id
@@ -261,13 +265,15 @@ module "brs_vpe" {
   # pre-configured to allow the cluster worker nodes to reach VPE targets.
   security_group_ids = [data.ibm_is_security_group.kube_vpeg_sg[0].id]
 
-  # Target the BRS instance by CRN. resource_type is "provider_cloud_service"
-  # for a CRN that contains at least 7 colon-separated segments.
+  # vpe_name is set explicitly so the for_each key in the child module is a
+  # static string known at plan time (not derived from vpc_id or CRN).
+  # Without this, the key would be "${prefix}-${vpc_name}-backup-recovery"
+  # where vpc_name comes from the worker-pool data source — unknown at plan.
   cloud_service_by_crn = [
     {
       crn          = module.backup_recovery_instance.brs_instance_crn
       service_name = "backup-recovery"
-      vpe_name     = var.brs_vpe_name != null ? var.brs_vpe_name : null
+      vpe_name     = var.brs_vpe_name != null ? var.brs_vpe_name : "${var.brs_connection_name}-vpe"
     }
   ]
 

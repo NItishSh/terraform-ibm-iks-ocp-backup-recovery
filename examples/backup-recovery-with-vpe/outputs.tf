@@ -11,6 +11,7 @@ output "brs_instance_crn" {
 output "brs_connection_id" {
   description = "ID of the BRS data source connection."
   value       = module.backup_recovery.connection_id
+  sensitive   = true
 }
 
 output "brs_vpe_ips" {

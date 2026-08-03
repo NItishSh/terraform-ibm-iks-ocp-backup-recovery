@@ -39,9 +39,12 @@ locals {
     id   = s.id
     zone = s.zone
     }] : [{
-    name = ibm_is_subnet.subnet_zone_1[0].name
+    # Use var.region directly so zone is known at plan time. The subnet resource
+    # always places zone_1 in "${var.region}-1", but reading it back from the
+    # resource attribute would yield an unknown value during planning.
+    name = "${var.prefix}-subnet-1"
     id   = ibm_is_subnet.subnet_zone_1[0].id
-    zone = ibm_is_subnet.subnet_zone_1[0].zone
+    zone = "${var.region}-1"
   }]
 }
 
