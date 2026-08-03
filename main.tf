@@ -331,8 +331,12 @@ resource "terraform_data" "dsc_immutable_values" {
   # On destroy: delete DSC PVCs after helm uninstall (helm_release depends_on
   # this resource, so it is destroyed first). RECLAIMPOLICY=Retain PVs are
   # printed for manual deletion; Delete-policy PVs are removed automatically.
+  # on_failure = continue: PVC cleanup is best-effort — if the cluster or
+  # namespace is already gone (e.g. force-deleted externally), a kubectl error
+  # must not block the rest of `terraform destroy`.
   provisioner "local-exec" {
     when        = destroy
+    on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = self.input.kubeconfig_path
@@ -579,9 +583,11 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # the DSC connection cleanup script runs on the BRS instance side.
 # destroy_duration fires between source_registration destruction and the
 # namespace wait, giving BRS time to process the async deregistration.
+# 15m matches the pre_connection_delete_wait in tests/resources-cross-cluster/
+# — both guard the same BRS async deregistration window.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "10m" # 10m to allow BRS async deregistration before connection delete
+  destroy_duration = "15m"
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.

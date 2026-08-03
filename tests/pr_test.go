@@ -313,7 +313,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// module version registers updated image versions against the same source.
 			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
 			// brs_source_deregistration_wait destroy_duration changed from 5m
-			// to 10m in this PR — in-place update, no resource replacement.
+			// to 15m — in-place update, no resource replacement.
 			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
 		},
 	}
