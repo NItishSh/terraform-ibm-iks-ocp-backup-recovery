@@ -296,9 +296,9 @@ module "backup_recovery" {
   # reach the target-account BRS API.  DSC traffic routes via the VPEG.
   brs_endpoint_type = "public"
 
-  # VPEG is created separately below (ibm.source) to place it in the
-  # correct source-account VPC.  The S2S auth is created above.
-  create_brs_vpe        = false # IMPORT_PLACEHOLDER
+  # VPEG is created by the root module using provider = ibm.cluster (= ibm.source),
+  # which places it in the source-account VPC.  S2S auth is created above.
+  create_brs_vpe        = true
   brs_source_account_id = null
 
   # ---- Backup policy ----
@@ -322,54 +322,3 @@ module "backup_recovery" {
   access_tags   = var.access_tags
 }
 
-##############################################################################
-# VPEG  (source account — the VPC that hosts the IKS cluster)
-#
-# The VPEG targets the BRS CRN from the target account.  The S2S IAM
-# authorization policy (created above in the target account) allows the
-# VPEG to resolve and connect to the cross-account BRS service endpoint.
-#
-# Reserved IP name is built from var.prefix and var.region so the
-# for_each key is statically known at plan time.
-##############################################################################
-
-module "brs_vpe" {
-  source  = "terraform-ibm-modules/vpe-gateway/ibm"
-  version = "5.3.5"
-  providers = {
-    ibm = ibm.source
-  }
-
-  # region is the cluster region — always known at plan time.
-  # prefix and vpc_name only affect naming when vpe_name is null; since
-  # vpe_name is always provided explicitly both are harmless labels.
-  region            = var.region
-  prefix            = "brs"
-  vpc_name          = var.prefix
-  vpc_id            = local.vpc_id
-  subnet_zone_list  = local.vpc_subnets
-  resource_group_id = module.source_resource_group.resource_group_id
-
-  # Attach to the kube-vpegw-<vpc-id> SG IKS creates on every VPC cluster.
-  security_group_ids = [data.ibm_is_security_group.kube_vpeg_sg.id]
-
-  # vpe_name is always explicit so the for_each map key is a static
-  # string known at plan time (not derived from vpc_id or BRS CRN).
-  cloud_service_by_crn = [
-    {
-      crn          = module.backup_recovery.brs_instance_crn
-      service_name = "backup-recovery"
-      vpe_name     = "${var.prefix}-brs-connection-vpe"
-    }
-  ]
-
-  depends_on = [module.brs_s2s_auth]
-}
-
-# Fetch the IKS-managed kube-vpegw security group from the source account.
-data "ibm_is_security_group" "kube_vpeg_sg" {
-  provider = ibm.source
-  name     = "kube-vpegw-${local.vpc_id}"
-
-  depends_on = [ibm_container_vpc_cluster.vpc_cluster]
-}

@@ -165,18 +165,20 @@ data "ibm_container_vpc_worker_pool" "pool" {
 ##############################################################################
 
 locals {
-  # All subnet IDs attached to the cluster's worker pools.
-  # For classic clusters is_vpc is false, so this will be [].
-  cluster_subnet_ids = local.is_vpc ? flatten(
+  # All subnet IDs attached to the cluster's worker pools — flattened then
+  # deduplicated. A single-zone cluster exposes the same subnet ID once per
+  # worker pool, so without distinct() the list has duplicates that produce
+  # duplicate for_each keys in the VPE gateway reserved-IP module.
+  # For classic clusters is_vpc is false so this will be [].
+  cluster_subnet_ids = local.is_vpc ? distinct(flatten(
     data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[*].zones[*].subnets[*].id
-  ) : []
+  )) : []
 
   # Only look up cluster subnets when we need them AND there are some.
-  # try() guards against an empty list before the count guard fires.
   cluster_subnet_lookup_count = var.create_brs_vpe && local.is_vpc && length(local.cluster_subnet_ids) > 0 ? length(local.cluster_subnet_ids) : 0
 }
 
-# Look up every cluster subnet individually.
+# Look up every unique cluster subnet individually.
 # The IDs come from worker_pools splat and are known at plan time, so the
 # count is static and Terraform can plan correctly without a two-phase apply.
 data "ibm_is_subnet" "cluster_subnet" {
@@ -193,8 +195,8 @@ locals {
   )
 
   # Subnet list: user-supplied takes precedence; built from the per-subnet
-  # lookups otherwise.  All values (name, id, zone) are known after the
-  # ibm_is_subnet reads, which are all apply-time but the keys are static.
+  # lookups otherwise. Deduplication of cluster_subnet_ids ensures each subnet
+  # object appears exactly once — required by the VPE module's for_each key.
   resolved_vpc_subnets = length(var.vpc_subnets) > 0 ? var.vpc_subnets : (
     local.cluster_subnet_lookup_count > 0 ? [for s in data.ibm_is_subnet.cluster_subnet : {
       name = s.name
