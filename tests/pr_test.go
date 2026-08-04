@@ -32,11 +32,20 @@ var excludeDirs = []string{".terraform", ".docs", ".github", ".git", ".idea", "c
 
 var includeFiletypes = []string{".tf", ".yaml", ".py", ".tpl", ".md", ".sh"}
 
-// Current supported regions
+// Current supported regions — keep this list >= number of parallel tests (6)
+// to minimise same-region collisions, which slow down IKS cluster provisioning
+// and can push total wall-clock time over the GitHub Actions job limit.
 var validRegions = []string{
 	"us-south",
 	"us-east",
 	"eu-es",
+	"eu-gb",
+	"eu-de",
+	"au-syd",
+	"br-sao",
+	"ca-tor",
+	"jp-osa",
+	"jp-tok",
 }
 
 type tarIncludePatterns struct {
@@ -205,6 +214,15 @@ func TestRunFullyConfigurableInSchematics(t *testing.T) {
 			// That path differs between Schematics jobs (each runs in a fresh
 			// temp dir), causing a side-effect-free in-place update.
 			"module.protect_cluster.terraform_data.wait_for_dsc_node_ready[0]",
+			// purge_stale_dsc_pvc has registration_token in triggers_replace.
+			// The token rotates by design between Schematics jobs so the resource
+			// shows as [update] (replace) on re-plan. The re-run is a no-op when a
+			// live DSC pod is present (upgrade path guard). Side-effect-free churn.
+			"module.protect_cluster.terraform_data.purge_stale_dsc_pvc",
+			// dsc_immutable_values stores the kubeconfig path in input for its
+			// destroy-time PVC cleanup provisioner. That path differs between
+			// Schematics jobs, causing a side-effect-free in-place update.
+			"module.protect_cluster.terraform_data.dsc_immutable_values",
 		},
 	}
 	// TODO(provider-fix): re-enable these once ibm provider PR #6906 is merged+released.
@@ -265,6 +283,10 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// because its trigger (connection_id) changes between the base and the
 			// new connection. Must be exempted from both IgnoreDestroys and IgnoreAdds.
 			"module.protect_cluster.time_sleep.wait_for_source_discovery",
+			// anyuid_scc_rolebinding was removed in this PR (over-permissive SCC
+			// binding). The upgrade plan shows it as a destroy because it exists
+			// in state from the base version but is no longer in the module.
+			"module.protect_cluster.kubernetes_role_binding_v1.anyuid_scc_rolebinding[0]",
 		},
 	}
 	options.IgnoreAdds = testhelper.Exemptions{
@@ -299,6 +321,9 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// source_registration is updated in-place on upgrade because the new
 			// module version registers updated image versions against the same source.
 			"module.protect_cluster.ibm_backup_recovery_source_registration.source_registration",
+			// brs_source_deregistration_wait destroy_duration changed from 5m
+			// to 15m — in-place update, no resource replacement.
+			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
 		},
 	}
 

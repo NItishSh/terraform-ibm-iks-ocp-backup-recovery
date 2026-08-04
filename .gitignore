@@ -74,3 +74,10 @@ go.work
 **/pipeline-logs
 **/*.code-workspace
 **/logs
+
+# Local KB / scratch files — not for commit
+ibmcloud-backup-recovery-cli-reference.html
+job-logs.txt
+run_tests_local.sh
+cleanup-test-resources.sh
+.env

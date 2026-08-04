@@ -45,11 +45,8 @@ variable "kube_type" {
   }
 }
 
-variable "rollback_on_failure" {
-  description = "Flag to automatically rollback the helm chart on installation failure."
-  type        = bool
-  default     = true
-}
+# rollback_on_failure intentionally removed — DSC docs §8 explicitly forbid
+# helm rollbacks; atomic mode is hard-coded to false in the helm_release resource.
 
 variable "wait_till" {
   description = "To avoid long wait times when you run your Terraform code, you can specify the stage when you want Terraform to mark the cluster resource creation as completed. Depending on what stage you choose, the cluster creation might not be fully completed and continues to run in the background. However, your Terraform code can continue to run without waiting for the cluster to be fully created. Supported args are `MasterNodeReady`, `OneWorkerNodeReady`, `IngressReady` and `Normal`"
@@ -80,7 +77,6 @@ variable "install_required_binaries" {
   nullable    = false
 }
 
-
 ##############################################################################
 # Data Source Connector (DSC)
 ##############################################################################
@@ -96,19 +92,6 @@ variable "dsc_chart_uri" {
   type        = string
   default     = "oci://icr.io/brs-charts/brs-ds-connector-chart:7.3.12-release-20260713-2e7241a2@sha256:b6a39948f5d1b6f765d0e73ebd2dd9c700ba0d5d5a120969efdfce2f75e8467e"
   nullable    = false
-}
-
-variable "dsc_image_version" {
-  description = "Container image for the Data Source Connector."
-  type        = string
-  default     = "icr.io/ext/brs/brs-ds-connector:7.3.12-release-20260713-2e7241a2@sha256:01b4fb26764c854a141c1e3dfb3be5c1b2dc6dda397f6532fc3c84136ca0698d"
-
-  validation {
-    condition     = can(regex("^[a-z0-9.-]+(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$", var.dsc_image_version))
-    error_message = "The image version must be in the format '<registry>/<namespace>/<repository>:<tag>@sha256:<64-hex-digest>'."
-  }
-
-  nullable = false
 }
 
 variable "dsc_name" {

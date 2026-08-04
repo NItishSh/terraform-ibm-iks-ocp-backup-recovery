@@ -196,6 +196,10 @@ locals {
   zones_list    = local.is_vpc && var.create_dsc_worker_pool ? [for zone in data.ibm_container_vpc_worker_pool.pool[0].zones : zone] : []
   base_workers  = local.num_zones > 0 ? floor(var.dsc_replicas / local.num_zones) : 0
   extra_workers = local.num_zones > 0 ? var.dsc_replicas % local.num_zones : 0
+
+  # Resolved storage class for the DSC PVC — used in both the Helm values and
+  # the diagnostics script so the expression is not repeated.
+  dsc_storage_class = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
 }
 
 resource "ibm_container_vpc_worker_pool" "data_source_connector" {
@@ -303,28 +307,75 @@ resource "kubernetes_namespace_v1" "dsc_namespace" {
   }
 }
 
-# On OpenShift (ROKS), grant anyuid SCC to all service accounts in the DSC
-# namespace so that DSC pods can run with the UID specified in their image.
-# Uses the typed kubernetes_role_binding_v1 resource (not kubernetes_manifest)
-# because kubernetes_manifest requires a live cluster API connection at plan
-# time, which is not available when the cluster is created in the same apply.
-resource "kubernetes_role_binding_v1" "anyuid_scc_rolebinding" {
-  count = var.kube_type == "openshift" ? 1 : 0
+##############################################################################
+# Freeze immutable Helm values at first install
+##############################################################################
 
-  metadata {
-    name      = "dsc-anyuid-scc"
-    namespace = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+# volumeClaimTemplate.storageClass is an immutable StatefulSet field —
+# the Kubernetes API rejects any helm upgrade that changes it.
+# Storing it in input under ignore_changes freezes the value at first apply
+# so post-install changes to var.dsc_storage_class never reach helm upgrade.
+# To change it: terraform destroy, clean up PVCs/PVs, then terraform apply.
+resource "terraform_data" "dsc_immutable_values" {
+  input = {
+    storage_class   = local.dsc_storage_class
+    namespace       = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    dsc_name        = var.dsc_name
   }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "system:openshift:scc:anyuid"
+
+  lifecycle {
+    ignore_changes = [input]
   }
-  subject {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "Group"
-    name      = "system:serviceaccounts:${kubernetes_namespace_v1.dsc_namespace.metadata[0].name}"
+
+  # On destroy: delete DSC PVCs after helm uninstall (helm_release depends_on
+  # this resource, so it is destroyed first). RECLAIMPOLICY=Retain PVs are
+  # printed for manual deletion; Delete-policy PVs are removed automatically.
+  # on_failure = continue: PVC cleanup is best-effort — if the cluster or
+  # namespace is already gone (e.g. force-deleted externally), a kubectl error
+  # must not block the rest of `terraform destroy`.
+  provisioner "local-exec" {
+    when        = destroy
+    on_failure  = continue
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = self.input.kubeconfig_path
+    }
+    command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}' destroy"
   }
+
+  depends_on = [kubernetes_namespace_v1.dsc_namespace]
+}
+
+##############################################################################
+# Purge stale DSC PVCs before Helm install
+##############################################################################
+
+# Orphaned PVCs from a failed install hold stale gandalf state and an expired
+# token; re-mounting them crashes the DSC immediately. The script deletes them
+# only when no live pod exists — upgrades are safe. Destroy-time PVC cleanup
+# is handled by dsc_immutable_values (destroyed after helm_release).
+resource "terraform_data" "purge_stale_dsc_pvc" {
+  triggers_replace = {
+    namespace          = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    registration_token = local.registration_token != null ? local.registration_token : ""
+  }
+
+  input = {
+    namespace       = kubernetes_namespace_v1.dsc_namespace.metadata[0].name
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+    dsc_name        = var.dsc_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = self.input.kubeconfig_path
+    }
+    command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}'"
+  }
+
+  depends_on = [kubernetes_namespace_v1.dsc_namespace]
 }
 
 ##############################################################################
@@ -340,19 +391,17 @@ resource "helm_release" "data_source_connector" {
   create_namespace = false
   timeout          = var.dsc_helm_timeout
   wait             = true
-  atomic           = var.rollback_on_failure
+  atomic           = false # DSC docs §8: rollbacks are unsupported and can corrupt PVC state.
+  cleanup_on_fail  = true
 
   values = [
     yamlencode({
       secrets = {
         registrationToken = local.registration_token != null ? local.registration_token : ""
       }
-      image = {
-        registry   = element(split("/", var.dsc_image_version), 0)
-        namespace  = element(split("/", var.dsc_image_version), 1)
-        repository = "${element(split("/", var.dsc_image_version), 2)}/${element(split("/", split(":", var.dsc_image_version)[0]), 3)}"
-        tag        = split("@", split(":", var.dsc_image_version)[1])[0]
-      }
+      # image.tag is intentionally omitted — the chart uses its AppVersion as the
+      # default tag, which is pinned to the chart version in dsc_chart_uri.
+      # DSC docs §6.1: "image.tag need not be supplied during helm install/upgrade".
       replicaCount     = var.dsc_replicas
       fullnameOverride = var.dsc_name
       resources = {
@@ -377,16 +426,18 @@ resource "helm_release" "data_source_connector" {
         }
       ] : []
       volumeClaimTemplate = {
-        storageClass = var.dsc_storage_class != null ? var.dsc_storage_class : (local.is_vpc ? "ibmc-vpc-block-metro-5iops-tier" : "ibmc-block-silver")
+        # Frozen at first apply — see dsc_immutable_values.
+        storageClass = terraform_data.dsc_immutable_values.input.storage_class
       }
     })
   ]
 
   depends_on = [
+    terraform_data.dsc_immutable_values,
     terraform_data.wait_for_dsc_node_ready,
+    terraform_data.purge_stale_dsc_pvc,
     ibm_container_vpc_worker_pool.data_source_connector,
     kubernetes_namespace_v1.dsc_namespace,
-    kubernetes_role_binding_v1.anyuid_scc_rolebinding,
   ]
 
   lifecycle {
@@ -401,15 +452,14 @@ resource "helm_release" "data_source_connector" {
   }
 
   # Collect pod, event, PVC, and node diagnostics when the Helm install fails.
-  # on_failure = continue ensures this runs even when helm times out or errors,
-  # so the logs are visible in the Terraform output before atomic rolls back.
+  # on_failure = continue ensures output is visible even when helm times out.
   provisioner "local-exec" {
     on_failure  = continue
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = data.ibm_container_cluster_config.cluster_config.config_file_path
     }
-    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}'"
+    command = "${path.module}/scripts/dsc-helm-diagnostics.sh '${self.namespace}' '${local.dsc_storage_class}'"
   }
 }
 
@@ -468,13 +518,19 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 # Source Registration
 ##############################################################################
 
-# Wait for DSC to stabilize after helm installation before source registration
+# Wait for DSC to stabilize after helm installation before source registration.
 resource "time_sleep" "wait_for_dsc_stabilization" {
   depends_on = [helm_release.data_source_connector]
 
   create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
 }
 
+# On destroy this sends DELETE to BRS, permanently removing the connector identity.
+# Correct for a full terraform destroy (PVCs also deleted).
+# NOT correct for a temporary scale-down (kubectl scale ... --replicas=0): pods
+# retain their identity and reconnect automatically when scaled back up — do not
+# deregister. Because terraform destroy always deletes PVCs too, the destroy path
+# here is always safe.
 resource "ibm_backup_recovery_source_registration" "source_registration" {
   x_ibm_tenant_id = local.brs_tenant_id
   environment     = "kKubernetes"
@@ -524,12 +580,14 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # BRS source deregistration is async on the backend. Without this sleep,
 # DeleteDataSourceConnectionWithContext fails with "can't be deleted as it is
 # being used by the source" because the connection is still referenced when
-# helm_release attempts to delete it.
+# the DSC connection cleanup script runs on the BRS instance side.
 # destroy_duration fires between source_registration destruction and the
 # namespace wait, giving BRS time to process the async deregistration.
+# 15m matches the pre_connection_delete_wait in tests/resources-cross-cluster/
+# — both guard the same BRS async deregistration window.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "5m" # Increased to allow sufficient time for async deregistration
+  destroy_duration = "15m"
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.
@@ -579,7 +637,7 @@ resource "time_sleep" "wait_for_source_discovery" {
 
   triggers = {
     connection_id = local.connection_id
-    dsc_version   = var.dsc_image_version
+    dsc_version   = var.dsc_chart_uri
   }
 
   create_duration = "10m"
@@ -956,9 +1014,9 @@ resource "terraform_data" "cancel_pg_runs" {
   for_each = { for pg in var.protection_groups : pg.name => pg }
 
   input = {
-    url                 = local.backup_recovery_instance_url
+    region              = local.brs_instance_region
     tenant              = local.brs_tenant_id
-    endpoint_type       = var.brs_endpoint_type
+    brs_endpoint        = local.backup_recovery_instance_url
     protection_group_id = ibm_backup_recovery_protection_group.protection_group[each.key].id
   }
 
@@ -968,10 +1026,10 @@ resource "terraform_data" "cancel_pg_runs" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "${path.module}/scripts/cancel_pg_runs.sh 'https://${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.protection_group_id}'"
+    command     = "${path.module}/scripts/cancel_pg_runs.sh '${self.input.region}' '${self.input.tenant}' '${self.input.protection_group_id}' '${self.input.brs_endpoint}'"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      API_KEY = self.triggers_replace.api_key
+      IBMCLOUD_API_KEY = self.triggers_replace.api_key # pragma: allowlist secret
     }
   }
 

@@ -53,3 +53,17 @@ module "target_connection" {
   create_new_instance       = false
   policies                  = []
 }
+
+# BRS source deregistration is asynchronous: after the cross-cluster example
+# destroys ibm_backup_recovery_source_registration, BRS continues processing
+# the deregistration in the background. If we delete the connection too soon,
+# BRS rejects with "can't be deleted as it is being used by the source".
+#
+# This sleep fires on destroy BEFORE the connection modules are destroyed,
+# giving BRS at least 15 minutes to complete all pending async deregistrations.
+# It depends_on both modules so Terraform's destroy order is:
+#   this sleep (15m) → module.source_connection → module.target_connection
+resource "time_sleep" "pre_connection_delete_wait" {
+  depends_on       = [module.source_connection, module.target_connection]
+  destroy_duration = "15m"
+}
