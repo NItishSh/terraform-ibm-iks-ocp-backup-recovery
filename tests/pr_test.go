@@ -328,7 +328,7 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			"module.protect_cluster.ibm_resource_tag.cluster_brs_tag[0]",
 			"module.protect_cluster.ibm_container_vpc_worker_pool.data_source_connector[0]",
 			// brs_source_deregistration_wait destroy_duration changed from 5m
-			// to 15m — in-place update, no resource replacement.
+			// to 10m — in-place update, no resource replacement.
 			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
 			// purge_stale_dsc_pvc was added in the same release cycle; it does not
 			// exist in the previous released version so the upgrade plan shows it

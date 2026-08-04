@@ -768,7 +768,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # — both guard the same BRS async deregistration window.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "15m"
+  destroy_duration = "10m"
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.

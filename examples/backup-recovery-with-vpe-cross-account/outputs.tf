@@ -21,7 +21,7 @@ output "brs_private_hostname" {
 
 output "brs_vpe_ips" {
   description = "Map of VPEG name → list of reserved IP objects bound to each subnet zone in the source-account VPC."
-  value       = module.backup_recovery.brs_vpe_ips
+  value       = module.brs_vpe.vpe_ips
 }
 
 output "s2s_auth_policies" {
