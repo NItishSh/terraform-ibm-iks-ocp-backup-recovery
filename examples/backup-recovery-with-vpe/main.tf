@@ -27,6 +27,20 @@
 locals {
   # cluster_id resolves to the newly-created cluster ID or the existing one.
   cluster_id = var.cluster_name_id != null ? data.ibm_container_vpc_cluster.vpc_cluster_data[0].name : ibm_container_vpc_cluster.vpc_cluster[0].id
+
+  # When a NEW cluster is created by this example, auto-discovery in the root
+  # module cannot read worker-pool subnet IDs until after the cluster apply.
+  # Pass the subnet explicitly so ibm_is_subnet count is always known at plan time.
+  # For an existing cluster (cluster_name_id != null), leave both as null/[] so
+  # the root module auto-discovers them from the cluster API.
+  explicit_vpc_id = var.cluster_name_id == null ? ibm_is_vpc.vpc[0].id : null
+  explicit_vpc_subnets = var.cluster_name_id == null ? [
+    {
+      name = ibm_is_subnet.subnet_zone_1[0].name
+      id   = ibm_is_subnet.subnet_zone_1[0].id
+      zone = ibm_is_subnet.subnet_zone_1[0].zone
+    }
+  ] : []
 }
 
 ##############################################################################
@@ -163,8 +177,15 @@ module "backup_recovery" {
   # instead of the IBM Cloud Service Endpoint (CSE).
   brs_endpoint_type = "public" # Terraform uses public; DSC traffic routes via VPE automatically
   create_brs_vpe    = true
-  # vpc_id and vpc_subnets are intentionally omitted — the root module
-  # auto-discovers both from the cluster's worker-pool subnets.
+
+  # When creating a new cluster the root module cannot auto-discover subnets at
+  # plan time (worker_pools is empty until apply). Supply the explicit subnet
+  # created above so ibm_is_subnet count is always known during plan.
+  # For an existing cluster (cluster_name_id != null) these are null/[] and the
+  # root module falls back to auto-discovery via the cluster data source.
+  vpc_id      = local.explicit_vpc_id
+  vpc_subnets = local.explicit_vpc_subnets
+
   brs_source_account_id = var.brs_source_account_id # null = same-account
 
   # ---- Backup policy ----

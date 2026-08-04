@@ -174,8 +174,20 @@ locals {
     data.ibm_container_vpc_cluster.vpc_cluster[0].worker_pools[*].zones[*].subnets[*].id
   )) : []
 
-  # Only look up cluster subnets when we need them AND there are some.
-  cluster_subnet_lookup_count = var.create_brs_vpe && local.is_vpc && length(local.cluster_subnet_ids) > 0 ? length(local.cluster_subnet_ids) : 0
+  # Only look up cluster subnets when ALL of the following hold:
+  #   1. VPE creation is requested
+  #   2. Caller did NOT supply vpc_subnets explicitly (auto-discovery path)
+  #   3. The cluster is a VPC cluster
+  # When the caller supplies vpc_subnets (including when a new cluster is being
+  # created in the same apply), skip the lookup entirely — the list length is
+  # already known at plan time from the caller-supplied value, so the count
+  # below is always static and Terraform can plan correctly.
+  cluster_subnet_lookup_count = (
+    var.create_brs_vpe &&
+    length(var.vpc_subnets) == 0 &&
+    local.is_vpc &&
+    length(local.cluster_subnet_ids) > 0
+  ) ? length(local.cluster_subnet_ids) : 0
 }
 
 # Look up every unique cluster subnet individually.

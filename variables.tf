@@ -233,7 +233,7 @@ variable "brs_endpoint_type" {
 ##############################################################################
 
 variable "create_brs_vpe" {
-  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. When true, vpc_id and vpc_subnets must also be provided. For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
+  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. For existing clusters, vpc_id and vpc_subnets are auto-discovered from the cluster's worker pools. When creating a new cluster in the same apply, supply vpc_id and vpc_subnets explicitly (the auto-discovery reads worker pools, which are unknown until after the cluster is applied). For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
   type        = bool
   default     = false
   nullable    = false

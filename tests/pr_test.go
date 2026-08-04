@@ -427,6 +427,12 @@ func TestRunVPEExample(t *testing.T) {
 		"module.backup_recovery.ibm_backup_recovery_source_registration.source_registration",
 		// cluster creation resource; tag drift causes spurious updates on consistency plan.
 		"ibm_container_vpc_cluster.vpc_cluster[0]",
+		// registration_token rotates by design between plan and consistency-plan;
+		// the sub-module recreates it every time, which is expected non-destructive churn.
+		"module.backup_recovery.module.backup_recovery_instance.ibm_backup_recovery_connection_registration_token.registration_token[0]",
+		// DSC helm release re-updates on every plan because the registration token
+		// rotates and the chart version resolves dynamically. Non-destructive churn.
+		"module.backup_recovery.helm_release.data_source_connector",
 	})
 
 	// parallelism=1 on destroy prevents VPC removal from racing worker-node cleanup.
