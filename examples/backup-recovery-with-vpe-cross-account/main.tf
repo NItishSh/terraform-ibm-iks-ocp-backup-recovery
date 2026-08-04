@@ -32,34 +32,6 @@ locals {
 
   # cluster_id: existing cluster name/ID or newly created cluster ID.
   cluster_id = var.cluster_name_id != null ? data.ibm_container_vpc_cluster.vpc_cluster_data[0].name : ibm_container_vpc_cluster.vpc_cluster[0].id
-
-  # Flatten all subnet IDs out of worker_pools -> zones -> subnets for an
-  # existing cluster. These IDs come from the cluster data source and are
-  # known at plan time, so the for_each count in ibm_is_subnet is static.
-  existing_cluster_subnet_ids = var.cluster_name_id != null ? flatten(
-    data.ibm_container_vpc_cluster.vpc_cluster_data[0].worker_pools[*].zones[*].subnets[*].id
-  ) : []
-
-  # Number of per-subnet lookups to perform for existing clusters.
-  existing_subnet_lookup_count = var.cluster_name_id != null ? length(local.existing_cluster_subnet_ids) : 0
-
-  # vpc_id: from new VPC resource when creating a cluster, or resolved via
-  # the first per-subnet lookup of the existing cluster (no user input needed).
-  vpc_id = var.cluster_name_id != null ? data.ibm_is_subnet.cluster_subnet[0].vpc : ibm_is_vpc.vpc[0].id
-
-  # vpc_subnets: for a new cluster, one static subnet from the IKS resource.
-  # For an existing cluster, built from the per-subnet lookups — all keys
-  # (name, id, zone) are known at apply time; the for_each key in module.brs_vpe
-  # is set explicitly via vpe_name so plan is still deterministic.
-  vpc_subnets = var.cluster_name_id != null ? [for s in data.ibm_is_subnet.cluster_subnet : {
-    name = s.name
-    id   = s.id
-    zone = s.zone
-    }] : [{
-    name = "${var.prefix}-subnet-1"
-    id   = ibm_is_subnet.subnet_zone_1[0].id
-    zone = "${var.region}-1"
-  }]
 }
 
 ##############################################################################
@@ -159,15 +131,6 @@ data "ibm_container_vpc_cluster" "vpc_cluster_data" {
 
   name              = var.cluster_name_id
   resource_group_id = module.source_resource_group.resource_group_id
-}
-
-# Look up every subnet of the existing cluster individually.
-# The IDs come from worker_pools splat and are known at plan time, so the
-# count is static and avoids the unknown-at-plan-time problem of ibm_is_subnets.
-data "ibm_is_subnet" "cluster_subnet" {
-  count      = local.existing_subnet_lookup_count
-  provider   = ibm.source
-  identifier = local.existing_cluster_subnet_ids[count.index]
 }
 
 ##############################################################################
@@ -321,4 +284,3 @@ module "backup_recovery" {
   resource_tags = var.resource_tags
   access_tags   = var.access_tags
 }
-
