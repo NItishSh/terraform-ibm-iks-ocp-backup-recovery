@@ -617,7 +617,7 @@
             {
               "key": "dsc_worker_pool_zones",
               "display_name": "DSC Worker Pool Zones",
-              "description": "Number of zones for the DSC worker pool (1–3). Use 2 or 3 for multi-zone HA."
+              "description": "Number of zones for the dedicated DSC worker pool (1–3). Only applies when 'Create DSC Worker Pool' is enabled. Use 1 for single-zone clusters, 2 or 3 for multi-zone high-availability deployments."
             }
           ],
           "dependencies": [],
