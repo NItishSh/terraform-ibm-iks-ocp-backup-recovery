@@ -580,11 +580,6 @@
               "display_name": "Add BRS Tags to Cluster"
             },
             {
-              "key": "install_required_binaries",
-              "display_name": "Install Required Binaries",
-              "description": "When true, automatically installs kubectl, jq, ibmcloud CLI, and backup-recovery plugin if not found on the runtime."
-            },
-            {
               "key": "create_brs_vpe",
               "display_name": "Create BRS VPE Gateway",
               "description": "Create a Virtual Private Endpoint Gateway to route cluster-to-BRS traffic over the IBM private backbone. For cross-account setups, also set 'BRS Source Account ID'."

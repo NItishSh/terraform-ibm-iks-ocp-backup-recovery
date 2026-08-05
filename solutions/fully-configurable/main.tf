@@ -84,20 +84,19 @@ module "protect_cluster" {
   brs_source_account_id = var.brs_source_account_id
   brs_vpe_name          = var.brs_vpe_name
   # --- Data Source Connector (DSC) ---
-  install_required_binaries = var.install_required_binaries
-  dsc_chart_uri             = var.dsc_chart_uri
-  dsc_name                  = var.dsc_name
-  dsc_replicas              = var.dsc_replicas
-  dsc_namespace             = var.dsc_namespace
-  dsc_helm_timeout          = var.dsc_helm_timeout
-  dsc_storage_class         = var.dsc_storage_class
-  create_dsc_worker_pool    = var.create_dsc_worker_pool
-  dsc_worker_pool_zones     = var.dsc_worker_pool_zones
-  dsc_worker_pool_flavor    = var.dsc_worker_pool_flavor
-  dsc_pod_cpu_limits        = var.dsc_pod_cpu_limits
-  dsc_pod_memory_limits     = var.dsc_pod_memory_limits
-  dsc_pod_cpu_requests      = var.dsc_pod_cpu_requests
-  dsc_pod_memory_requests   = var.dsc_pod_memory_requests
+  dsc_chart_uri           = var.dsc_chart_uri
+  dsc_name                = var.dsc_name
+  dsc_replicas            = var.dsc_replicas
+  dsc_namespace           = var.dsc_namespace
+  dsc_helm_timeout        = var.dsc_helm_timeout
+  dsc_storage_class       = var.dsc_storage_class
+  create_dsc_worker_pool  = var.create_dsc_worker_pool
+  dsc_worker_pool_zones   = var.dsc_worker_pool_zones
+  dsc_worker_pool_flavor  = var.dsc_worker_pool_flavor
+  dsc_pod_cpu_limits      = var.dsc_pod_cpu_limits
+  dsc_pod_memory_limits   = var.dsc_pod_memory_limits
+  dsc_pod_cpu_requests    = var.dsc_pod_cpu_requests
+  dsc_pod_memory_requests = var.dsc_pod_memory_requests
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
