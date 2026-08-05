@@ -395,16 +395,16 @@ main() {
   fi
 
   # Wait for all active runs to reach a terminal state.
-  # Timeout is 60 minutes — archival (CloudArchiveDirect) tasks can take
-  # 30+ minutes to cancel when mid-upload to cloud storage.
-  echo "Waiting for ${active_count} active run(s) to stop (timeout 60m)..." >&2
+  # Timeout is 20 minutes — archival (CloudArchiveDirect) tasks can take
+  # several minutes to cancel when mid-upload to cloud storage.
+  echo "Waiting for ${active_count} active run(s) to stop (timeout 20m)..." >&2
   local timeout_at
   timeout_at=$(( $(date +%s) + 1200 ))
 
   while [[ "$(date +%s)" -lt "$timeout_at" ]]; do
     sleep 15
     echo "Re-checking run states..."
-    if ! has_active_runs; then
+    if ! has_active_work; then
       echo "All runs stopped. Sleeping 60s for BRS backend state propagation..."
       sleep 60
       echo "Protection group is ready for deletion."

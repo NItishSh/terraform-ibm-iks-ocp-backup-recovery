@@ -19,7 +19,7 @@ variable "cluster_resource_group_id" {
 }
 
 variable "brs_resource_group_id" {
-  description = "Resource group ID in which to create the BRS instance. Defaults to `cluster_resource_group_id` when null (same-account deployments). Set this to a resource group in the target account when the BRS instance lives in a different IBM Cloud account from the cluster."
+  description = "The ID of the resource group where the BRS instance will be created. If this value is null, `cluster_resource_group_id` is used by default. This is suitable when the cluster and the BRS instance are in the same IBM Cloud account. Set this to a resource group in the target account when the BRS instance lives in a different IBM Cloud account from the cluster."
   type        = string
   default     = null
 }
@@ -218,7 +218,7 @@ variable "region" {
 }
 
 variable "brs_endpoint_type" {
-  description = "The endpoint type to use when connecting to the Backup and Recovery service for Terraform provider operations and script calls. Allowed values are 'public' or 'private'. When create_brs_vpe=true and this is set to 'private', the DSC pods reach BRS over the Virtual Private Endpoint Gateway (VPE) instead of the IBM Cloud Service Endpoint (CSE) — the BRS endpoint URL is automatically overridden to the VPE DNS hostname inside the cluster VPC."
+  description = "The endpoint type to use when connecting to the Backup and Recovery service for Terraform provider operations and script calls. Allowed values are 'public' or 'private'. When `create_brs_vpe`=true and this is set to 'private', the DSC pods reach BRS over the Virtual Private Endpoint Gateway (VPE) instead of the IBM Cloud Service Endpoint (CSE) — the BRS endpoint URL is automatically overridden to the VPE DNS hostname inside the cluster VPC."
   type        = string
   default     = "private"
 
@@ -233,7 +233,7 @@ variable "brs_endpoint_type" {
 ##############################################################################
 
 variable "create_brs_vpe" {
-  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. For existing clusters, vpc_id and vpc_subnets are auto-discovered from the cluster's worker pools. When creating a new cluster in the same apply, supply vpc_id and vpc_subnets explicitly (the auto-discovery reads worker pools, which are unknown until after the cluster is applied). For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
+  description = "Set to `true` to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. For existing clusters, `vpc_id` and `vpc_subnets` are auto-discovered from the cluster's worker pools. When creating a new cluster in the same apply, supply `vpc_id` and `vpc_subnets` explicitly (the auto-discovery reads worker pools, which are unknown until after the cluster is applied). For cross-account setups (BRS in a different IBM Cloud account), also provide `brs_source_account_id` to create the required S2S IAM authorization policy."
   type        = bool
   default     = false
   nullable    = false
@@ -263,7 +263,7 @@ variable "brs_source_account_id" {
 }
 
 variable "brs_vpe_name" {
-  description = "Override the name of the BRS Virtual Private Endpoint Gateway. If null, the name is auto-generated as '<prefix>-<vpc_name>-backup-recovery'."
+  description = "Override the name of the BRS Virtual Private Endpoint Gateway. If null, the name is auto-generated as '<brs_connection_name>-vpe'."
   type        = string
   default     = null
 }
