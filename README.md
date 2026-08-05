@@ -413,6 +413,7 @@ You need the following permissions to run this module:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_auto_protect_pg_id"></a> [auto\_protect\_pg\_id](#output\_auto\_protect\_pg\_id) | ID of the auto-protect protection group created by BRS when enable\_auto\_protect=true. Null when auto-protect is not enabled or the registration has not yet propagated. |
 | <a name="output_backup_runs_summary"></a> [backup\_runs\_summary](#output\_backup\_runs\_summary) | Summary of backup runs per protection group. Shows run count and latest run status. Empty if recovery is not enabled by the calling module. |
 | <a name="output_brs_instance_crn"></a> [brs\_instance\_crn](#output\_brs\_instance\_crn) | CRN of the Backup & Recovery Service instance |
 | <a name="output_brs_instance_guid"></a> [brs\_instance\_guid](#output\_brs\_instance\_guid) | GUID of the Backup & Recovery Service instance |

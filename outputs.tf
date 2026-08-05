@@ -32,6 +32,11 @@ output "protection_group_ids" {
   value       = { for k, v in ibm_backup_recovery_protection_group.protection_group : k => v.id }
 }
 
+output "auto_protect_pg_id" {
+  description = "ID of the auto-protect protection group created by BRS when enable_auto_protect=true. Null when auto-protect is not enabled or the registration has not yet propagated."
+  value       = try(ibm_backup_recovery_source_registration.source_registration.kubernetes_params[0].auto_protect_config[0].protection_group_id, null)
+}
+
 output "protection_sources" {
   description = "List of protection sources."
   value       = data.ibm_backup_recovery_protection_sources.sources

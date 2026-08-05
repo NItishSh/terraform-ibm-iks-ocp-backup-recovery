@@ -132,10 +132,18 @@ locals {
   ) : null
 
   # Extract protection group ID for recovery.
-  # Keep the full ID returned by the module because downstream resources/scripts
-  # expect the protection group identifier in that format.
-  recovery_pg_id = local.is_full_recovery && local.recovery_pg_name != null ? (
-    try(split("::", module.protect_cluster.protection_group_ids[local.recovery_pg_name])[1], null)
+  # When protection_groups were created via for_each, the ID is in protection_group_ids.
+  # When enable_auto_protect=true and no explicit protection_groups list is given,
+  # BRS creates the PG automatically — its ID comes from auto_protect_pg_id instead.
+  # The full "tenant::id" format is stripped to just the numeric ID because the
+  # wait_for_backup_run.sh script expects a plain numeric ID argument.
+  recovery_pg_id = local.is_full_recovery ? (
+    try(
+      split("::", module.protect_cluster.protection_group_ids[local.recovery_pg_name])[1],
+      # fallback: auto-protect PG (enable_auto_protect=true path)
+      split("::", module.protect_cluster.auto_protect_pg_id)[1],
+      null
+    )
   ) : null
 }
 
