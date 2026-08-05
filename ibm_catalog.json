@@ -102,8 +102,7 @@
             },
             {
               "key": "source_ibmcloud_api_key",
-              "display_name": "Source Account API Key",
-              "description": "IBM Cloud API key for the source (cluster/VPC) account. Required only for cross-account deployments where the BRS instance lives in a different account from the cluster. Leave empty for same-account deployments."
+              "display_name": "Source Account API Key"
             },
             {
               "key": "region",
@@ -274,7 +273,6 @@
               "key": "deployment_mode",
               "display_name": "Deployment Mode",
               "required": true,
-              "description": "Select the deployment scenario: 'Backup Only' for backup without recovery, 'Connected Component' for connection setup only, or 'Full Backup and Recovery' for end-to-end validation with backup and recovery.",
               "options": [
                 {
                   "displayname": "Backup Only (Default)",
@@ -329,7 +327,6 @@
             {
               "key": "enable_auto_protect",
               "display_name": "Enable Auto-Protect",
-              "description": "Enable auto-protect for automatic backup of all namespaces. Only applicable in 'backup_only' and 'full_backup_recovery' modes.",
               "hidden": {
                 "deployment_mode": "connected_component"
               }
@@ -337,7 +334,6 @@
             {
               "key": "auto_protect_policy_name",
               "display_name": "Auto-Protect Policy Name",
-              "description": "Name of the protection policy to use for auto-protect. Only applicable in 'backup_only' and 'full_backup_recovery' modes.",
               "hidden": {
                 "deployment_mode": "connected_component"
               }
@@ -345,7 +341,6 @@
             {
               "key": "protection_groups",
               "display_name": "Protection Groups",
-              "description": "Define granular protection groups for specific namespaces. Only applicable in 'backup_only' and 'full_backup_recovery' modes.",
               "custom_config": {
                 "type": "code_editor",
                 "grouping": "deployment",
@@ -421,7 +416,6 @@
             {
               "key": "recovery_type",
               "display_name": "Recovery Type",
-              "description": "Type of recovery: 'same-cluster' or 'cross-cluster'.",
               "options": [
                 {
                   "displayname": "Same Cluster",
@@ -442,7 +436,6 @@
             {
               "key": "recovery_namespace_prefix",
               "display_name": "Recovery Namespace Prefix",
-              "description": "Prefix for recovered namespace names.",
               "hidden": {
                 "deployment_mode": [
                   "backup_only",
@@ -453,7 +446,6 @@
             {
               "key": "recovery_protection_group_name",
               "display_name": "Recovery Protection Group Name",
-              "description": "Name of protection group to recover from.",
               "hidden": {
                 "deployment_mode": [
                   "backup_only",
@@ -464,7 +456,6 @@
             {
               "key": "recovery_wait_timeout_minutes",
               "display_name": "Recovery Wait Timeout (Minutes)",
-              "description": "Maximum time to wait for backup completion.",
               "hidden": {
                 "deployment_mode": [
                   "backup_only",
@@ -475,7 +466,6 @@
             {
               "key": "recovery_poll_interval_seconds",
               "display_name": "Recovery Poll Interval (Seconds)",
-              "description": "Interval between backup status checks.",
               "hidden": {
                 "deployment_mode": [
                   "backup_only",
@@ -486,7 +476,6 @@
             {
               "key": "target_cluster_id",
               "display_name": "Target Cluster",
-              "description": "Target cluster for 'connected_component' mode or `cross-cluster` recovery in 'full_backup_recovery' mode.",
               "custom_config": {
                 "type": "cluster_var",
                 "grouping": "deployment",
@@ -499,7 +488,6 @@
             {
               "key": "target_cluster_resource_group_id",
               "display_name": "Target Cluster Resource Group",
-              "description": "Resource group of the target cluster. Required for 'connected_component' and `cross-cluster` recovery.",
               "custom_config": {
                 "type": "resource_group",
                 "grouping": "deployment",
@@ -515,7 +503,6 @@
             {
               "key": "target_cluster_config_endpoint_type",
               "display_name": "Target Cluster Config Endpoint Type",
-              "description": "Endpoint type for target cluster config access.",
               "options": [
                 {
                   "displayname": "Default",
@@ -541,7 +528,6 @@
             {
               "key": "target_brs_connection_name",
               "display_name": "Target BRS Connection Name",
-              "description": "Name for the BRS connection to the target cluster.",
               "hidden": {
                 "deployment_mode": "backup_only"
               }
@@ -549,7 +535,6 @@
             {
               "key": "target_brs_create_new_connection",
               "display_name": "Create New Target Connection",
-              "description": "Whether to create a new BRS connection for the target cluster. Set to `false` to reuse an existing connection matching `target_brs_connection_name`.",
               "hidden": {
                 "deployment_mode": "backup_only"
               }
@@ -557,7 +542,6 @@
             {
               "key": "target_create_dsc_worker_pool",
               "display_name": "Create DSC Worker Pool on Target",
-              "description": "Create dedicated worker pool for DSC on target cluster.",
               "hidden": {
                 "deployment_mode": "backup_only"
               }
@@ -565,7 +549,6 @@
             {
               "key": "brs_resource_group_id",
               "display_name": "BRS Instance Resource Group",
-              "description": "Resource group ID for the BRS instance. Leave empty for same-account deployments (defaults to cluster resource group). Set for cross-account deployments where the BRS instance is in a different account.",
               "custom_config": {
                 "type": "resource_group",
                 "grouping": "deployment",
@@ -581,18 +564,15 @@
             },
             {
               "key": "create_brs_vpe",
-              "display_name": "Create BRS VPE Gateway",
-              "description": "Create a Virtual Private Endpoint Gateway to route cluster-to-BRS traffic over the IBM private backbone. For cross-account setups, also set 'BRS Source Account ID'."
+              "display_name": "Create BRS VPE Gateway"
             },
             {
               "key": "vpc_id",
-              "display_name": "VPC ID (for VPE)",
-              "description": "VPC ID for the BRS VPE Gateway. Auto-discovered from the cluster when omitted."
+              "display_name": "VPC ID (for VPE)"
             },
             {
               "key": "vpc_subnets",
               "display_name": "VPC Subnets (for VPE)",
-              "description": "Subnets to bind VPE reserved IPs. Auto-discovered from the cluster when omitted.",
               "custom_config": {
                 "type": "code_editor",
                 "grouping": "deployment",
@@ -606,18 +586,15 @@
             },
             {
               "key": "brs_source_account_id",
-              "display_name": "BRS Source Account ID",
-              "description": "IBM Cloud account ID of the account where the cluster and VPC reside. Required for cross-account setups to create the S2S IAM authorization policy."
+              "display_name": "BRS Source Account ID"
             },
             {
               "key": "brs_vpe_name",
-              "display_name": "BRS VPE Gateway Name",
-              "description": "Override the auto-generated name for the BRS VPE Gateway."
+              "display_name": "BRS VPE Gateway Name"
             },
             {
               "key": "dsc_worker_pool_zones",
-              "display_name": "DSC Worker Pool Zones",
-              "description": "Number of zones for the dedicated DSC worker pool (1–3). Only applies when 'Create DSC Worker Pool' is enabled. Use 1 for single-zone clusters, 2 or 3 for multi-zone high-availability deployments."
+              "display_name": "DSC Worker Pool Zones"
             }
           ],
           "dependencies": [],
