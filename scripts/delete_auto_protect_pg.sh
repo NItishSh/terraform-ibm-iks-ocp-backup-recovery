@@ -204,7 +204,7 @@ check_and_cancel() {
   local all_run_ids
   all_run_ids=$(
     { echo "$backup_data"; echo "$archival_data"; } \
-      | jq -rs '[.[].runs[].id // empty] | unique | .[]'
+      | jq -rs '[.[].runs?[]?.id // empty] | unique | .[]'
   )
 
   [[ -z "$all_run_ids" ]] && { echo "0"; return 0; }
