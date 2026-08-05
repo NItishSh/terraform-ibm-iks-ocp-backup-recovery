@@ -131,20 +131,6 @@ locals {
     var.auto_protect_policy_name
   ) : null
 
-  # Extract protection group ID for recovery.
-  # When protection_groups were created via for_each, the ID is in protection_group_ids.
-  # When enable_auto_protect=true and no explicit protection_groups list is given,
-  # BRS creates the PG automatically — its ID comes from auto_protect_pg_id instead.
-  # The full "tenant::id" format is stripped to just the numeric ID because the
-  # wait_for_backup_run.sh script expects a plain numeric ID argument.
-  recovery_pg_id = local.is_full_recovery ? (
-    try(
-      split("::", module.protect_cluster.protection_group_ids[local.recovery_pg_name])[1],
-      # fallback: auto-protect PG (enable_auto_protect=true path)
-      split("::", module.protect_cluster.auto_protect_pg_id)[1],
-      null
-    )
-  ) : null
 }
 
 ##############################################################################
@@ -279,18 +265,30 @@ resource "terraform_data" "wait_for_backup" {
     tenant                = module.protect_cluster.brs_tenant_id
     endpoint_type         = var.brs_endpoint_type
     instance_id           = module.protect_cluster.brs_instance_guid
-    protection_group_id   = local.recovery_pg_id
     api_key               = sensitive(var.ibmcloud_api_key)
     timeout_minutes       = var.recovery_wait_timeout_minutes
     poll_interval_seconds = var.recovery_poll_interval_seconds
     binaries_path         = "/tmp"
+    # protection_group_id is resolved from module outputs after apply.
+    # It is passed via environment variable (not interpolated into the command
+    # string) so that a null/unknown value at plan time does not cause
+    # "Cannot include a null value in a string template".
+    protection_group_id = coalesce(
+      # explicit PG from for_each (used when protection_groups var is set)
+      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
+      # auto-protect PG (used when enable_auto_protect=true)
+      module.protect_cluster.auto_protect_pg_id,
+      # plan-time placeholder — replaced by the real value at apply
+      ""
+    )
   }
 
   provisioner "local-exec" {
-    command     = "${path.module}/../../scripts/wait_for_backup_run.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.instance_id}' '${self.input.protection_group_id}' '${self.input.timeout_minutes}' '${self.input.poll_interval_seconds}' '${self.input.binaries_path}' > /tmp/backup_snapshot_${self.input.instance_id}.json"
+    command     = "${path.module}/../../scripts/wait_for_backup_run.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.instance_id}' \"$BRS_PG_ID\" '${self.input.timeout_minutes}' '${self.input.poll_interval_seconds}' '${self.input.binaries_path}' > /tmp/backup_snapshot_${self.input.instance_id}.json"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       IBMCLOUD_API_KEY = self.input.api_key # pragma: allowlist secret
+      BRS_PG_ID        = self.input.protection_group_id
     }
   }
 }
@@ -303,11 +301,15 @@ resource "terraform_data" "same_cluster_recovery" {
   count = local.is_full_recovery && var.recovery_type == "same-cluster" ? 1 : 0
 
   input = {
-    url              = module.protect_cluster.brs_instance_url
-    tenant           = module.protect_cluster.brs_tenant_id
-    endpoint_type    = var.brs_endpoint_type
-    instance_id      = module.protect_cluster.brs_instance_guid
-    source_pg_id     = local.recovery_pg_id
+    url           = module.protect_cluster.brs_instance_url
+    tenant        = module.protect_cluster.brs_tenant_id
+    endpoint_type = var.brs_endpoint_type
+    instance_id   = module.protect_cluster.brs_instance_guid
+    source_pg_id = coalesce(
+      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
+      module.protect_cluster.auto_protect_pg_id,
+      ""
+    )
     target_source_id = split("::", module.protect_cluster.source_registration_id)[1]
     api_key          = sensitive(var.ibmcloud_api_key)
     recovery_name    = "recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
@@ -325,7 +327,7 @@ resource "terraform_data" "same_cluster_recovery" {
         '${self.input.tenant}' \
         '${self.input.endpoint_type}' \
         '${self.input.instance_id}' \
-        '${self.input.source_pg_id}' \
+        "$BRS_PG_ID" \
         '${self.input.target_source_id}' \
         "$SNAPSHOT_ID" \
         '${self.input.recovery_name}' \
@@ -334,6 +336,7 @@ resource "terraform_data" "same_cluster_recovery" {
     EOT
     environment = {
       IBMCLOUD_API_KEY = self.input.api_key # pragma: allowlist secret
+      BRS_PG_ID        = self.input.source_pg_id
     }
   }
 
@@ -348,11 +351,15 @@ resource "terraform_data" "cross_cluster_recovery" {
   count = local.is_full_recovery && var.recovery_type == "cross-cluster" ? 1 : 0
 
   input = {
-    url              = module.protect_cluster.brs_instance_url
-    tenant           = module.protect_cluster.brs_tenant_id
-    endpoint_type    = var.brs_endpoint_type
-    instance_id      = module.protect_cluster.brs_instance_guid
-    source_pg_id     = local.recovery_pg_id
+    url           = module.protect_cluster.brs_instance_url
+    tenant        = module.protect_cluster.brs_tenant_id
+    endpoint_type = var.brs_endpoint_type
+    instance_id   = module.protect_cluster.brs_instance_guid
+    source_pg_id = coalesce(
+      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
+      module.protect_cluster.auto_protect_pg_id,
+      ""
+    )
     target_source_id = split("::", module.target_cluster_registration[0].source_registration_id)[1]
     api_key          = sensitive(var.ibmcloud_api_key)
     recovery_name    = "cross-cluster-recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
@@ -370,7 +377,7 @@ resource "terraform_data" "cross_cluster_recovery" {
         '${self.input.tenant}' \
         '${self.input.endpoint_type}' \
         '${self.input.instance_id}' \
-        '${self.input.source_pg_id}' \
+        "$BRS_PG_ID" \
         '${self.input.target_source_id}' \
         "$SNAPSHOT_ID" \
         '${self.input.recovery_name}' \
@@ -379,6 +386,7 @@ resource "terraform_data" "cross_cluster_recovery" {
     EOT
     environment = {
       IBMCLOUD_API_KEY = self.input.api_key # pragma: allowlist secret
+      BRS_PG_ID        = self.input.source_pg_id
     }
   }
 
