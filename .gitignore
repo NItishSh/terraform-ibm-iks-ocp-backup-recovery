@@ -82,3 +82,4 @@ run_tests_local.sh
 cleanup-test-resources.sh
 .env
 terraform.tfvars
+solutions/fully-configurable/scenarios
