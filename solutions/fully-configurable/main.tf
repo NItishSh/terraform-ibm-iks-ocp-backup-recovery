@@ -70,7 +70,6 @@ module "protect_cluster" {
   ibmcloud_api_key          = var.ibmcloud_api_key
   brs_endpoint_type         = var.brs_endpoint_type
   existing_brs_instance_crn = var.existing_brs_instance_crn
-  create_new_brs_instance   = var.create_new_brs_instance
   brs_instance_name         = var.brs_instance_name
   brs_resource_group_id     = var.brs_resource_group_id
   region                    = local.region

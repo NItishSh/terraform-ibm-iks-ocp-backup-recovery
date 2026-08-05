@@ -477,12 +477,6 @@ variable "brs_create_new_connection" {
   nullable    = false
 }
 
-variable "create_new_brs_instance" {
-  description = "Whether to provision a new Backup & Recovery Service instance. Leave as `null` (default) to infer the behaviour from `existing_brs_instance_crn` (a new instance is created when the CRN is not provided). Set to `false` to reuse an existing instance whose CRN is only known after apply."
-  type        = bool
-  default     = null
-}
-
 variable "create_brs_vpe" {
   description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. For existing clusters, vpc_id and vpc_subnets are auto-discovered from the cluster's worker pools. When creating a new cluster in the same apply, supply vpc_id and vpc_subnets explicitly. For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
   type        = bool
