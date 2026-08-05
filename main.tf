@@ -709,7 +709,13 @@ resource "kubernetes_secret_v1" "brsagent_token" {
 resource "time_sleep" "wait_for_dsc_stabilization" {
   depends_on = [helm_release.data_source_connector]
 
-  create_duration = "5m" # DSC needs 5 minutes to stabilize after pod ready
+  # 10m observed minimum for the DSC gRPC tunnel to BRS to fully establish after
+  # the pod passes Kubernetes readiness (/bifrost/readyz). The readiness probe only
+  # confirms the HTTP server started — the BRS cluster-config protobin handshake
+  # and reverse-tunnel setup take several additional minutes. Without this wait,
+  # source_registration hits the BRS API before the DSC has connected, causing
+  # RegisterProtectionSourceWithContext: Gateway Timeout (BRS internal 9-10 min limit).
+  create_duration = "10m"
 }
 
 # On destroy this sends DELETE to BRS, permanently removing the connector identity.
