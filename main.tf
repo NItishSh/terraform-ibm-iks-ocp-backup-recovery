@@ -1277,11 +1277,10 @@ resource "terraform_data" "delete_auto_protect_pg" {
   count      = var.enable_auto_protect && var.auto_protect_policy_name != null ? 1 : 0
 
   input = {
-    url                 = local.backup_recovery_instance_url
+    region              = local.brs_instance_region
     tenant              = local.brs_tenant_id
-    endpoint_type       = var.brs_endpoint_type
     protection_group_id = ibm_backup_recovery_source_registration.source_registration.kubernetes_params[0].auto_protect_config[0].protection_group_id
-    registration_id     = replace(ibm_backup_recovery_source_registration.source_registration.id, "${local.brs_tenant_id}::", "")
+    brs_endpoint        = local.backup_recovery_instance_url
     api_key             = sensitive(var.ibmcloud_api_key)
   }
 
@@ -1291,10 +1290,10 @@ resource "terraform_data" "delete_auto_protect_pg" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "${path.module}/scripts/delete_auto_protect_pg.sh https://${self.input.url} ${self.input.tenant} ${self.input.endpoint_type} ${self.input.protection_group_id} ${self.input.registration_id}"
+    command     = "${path.module}/scripts/delete_auto_protect_pg.sh '${self.input.region}' '${self.input.tenant}' '${self.input.protection_group_id}' '${self.input.brs_endpoint}'"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      API_KEY = self.triggers_replace.api_key
+      IBMCLOUD_API_KEY = self.triggers_replace.api_key # pragma: allowlist secret
     }
   }
 }
