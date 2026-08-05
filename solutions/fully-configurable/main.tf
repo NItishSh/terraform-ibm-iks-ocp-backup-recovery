@@ -7,8 +7,10 @@ locals {
   is_full_recovery = var.deployment_mode == "full_backup_recovery"
 }
 # Retrieve information about an existing VPC cluster
+# Uses ibm.cluster provider — source account in cross-account deployments.
 data "ibm_container_vpc_cluster" "vpc_cluster" {
   count             = local.is_vpc ? 1 : 0
+  provider          = ibm.cluster
   name              = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   wait_till         = var.wait_till
@@ -18,12 +20,14 @@ data "ibm_container_vpc_cluster" "vpc_cluster" {
 # Retrieve information about an existing Classic cluster
 data "ibm_container_cluster" "classic_cluster" {
   count             = local.is_classic ? 1 : 0
+  provider          = ibm.cluster
   name              = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   wait_till         = var.wait_till
   wait_till_timeout = var.wait_till_timeout
 }
 data "ibm_container_cluster_config" "cluster_config" {
+  provider          = ibm.cluster
   cluster_name_id   = var.cluster_id
   resource_group_id = var.cluster_resource_group_id
   config_dir        = "${path.module}/kubeconfig"
@@ -151,6 +155,7 @@ locals {
 
 data "ibm_container_vpc_cluster" "target_cluster" {
   count             = local.deploy_target_cluster ? 1 : 0
+  provider          = ibm.cluster
   name              = var.target_cluster_id
   resource_group_id = var.target_cluster_resource_group_id
   wait_till         = var.wait_till
@@ -161,6 +166,7 @@ data "ibm_container_cluster_config" "target_cluster_config" {
   depends_on = [data.ibm_container_vpc_cluster.target_cluster]
 
   count             = local.deploy_target_cluster ? 1 : 0
+  provider          = ibm.cluster
   cluster_name_id   = var.target_cluster_id
   resource_group_id = var.target_cluster_resource_group_id
   config_dir        = "${path.module}/kubeconfig"
