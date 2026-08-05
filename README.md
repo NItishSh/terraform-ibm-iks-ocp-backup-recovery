@@ -426,6 +426,7 @@ You need the following permissions to run this module:
 | <a name="output_protection_sources"></a> [protection\_sources](#output\_protection\_sources) | List of protection sources. |
 | <a name="output_recovery_ids"></a> [recovery\_ids](#output\_recovery\_ids) | Map of recovery operation names to their IDs. Empty if recovery is not enabled. |
 | <a name="output_recovery_status"></a> [recovery\_status](#output\_recovery\_status) | Map of recovery operation names to their status information. Empty if recovery is not enabled by the calling module. |
+| <a name="output_s2s_auth_policies"></a> [s2s\_auth\_policies](#output\_s2s\_auth\_policies) | S2S IAM authorization policies created in this account. Populated only when brs\_source\_account\_id is set (cross-account VPE); empty map otherwise. |
 | <a name="output_source_registration_id"></a> [source\_registration\_id](#output\_source\_registration\_id) | ID of the registered Kubernetes source. |
 | <a name="output_target_cluster_id"></a> [target\_cluster\_id](#output\_target\_cluster\_id) | Target cluster ID for recovery operations. Same as source cluster for `same-cluster` recovery mode. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

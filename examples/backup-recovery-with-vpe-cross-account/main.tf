@@ -3,23 +3,29 @@
 #
 # Demonstrates BRS VPE connectivity across two IBM Cloud accounts:
 #
-#   SOURCE account  (source_ibmcloud_api_key)
+#   SOURCE account  (source_ibmcloud_api_key / ibm.source provider alias)
 #     - IKS VPC cluster  (created or existing)
 #     - VPC + subnet + public gateway  (created when cluster_name_id = null)
-#     - VPE Gateway  (brs-vpe-brs-connection-vpe)  targeting the BRS CRN
+#     - VPE Gateway  (created by root module when create_brs_vpe = true)
 #
-#   TARGET account  (ibmcloud_api_key / default provider)
+#   TARGET account  (ibmcloud_api_key / default ibm provider)
 #     - BRS instance  (new or existing)
 #     - BRS data-source connection + registration token
-#     - S2S IAM authorization policy  (endpoint-gateway in source account
-#       → BRS instance in target account)
+#     - S2S IAM authorization policy  (created by root module when
+#       brs_source_account_id is set)
 #
-# Apply order
-# -----------
-# Both provider aliases share a single terraform apply.  Terraform
-# resolves the dependency graph so the BRS instance + S2S auth are
-# created before the VPEG is attached, and the VPEG is live before the
-# DSC Helm chart is deployed.
+# Apply order (enforced by the root module's internal dependency graph)
+# -----------------------------------------------------------------------
+# Track A (target account, starts immediately):
+#   BRS instance → connection → registration token
+#   S2S IAM auth policy  (waits only for BRS instance GUID)
+#
+# Track B (source account, starts immediately in parallel with Track A):
+#   VPC → subnet → gateway → IKS cluster
+#
+# Gate: S2S policy created → VPEG created (source account VPC)
+# Gate: VPEG live + cluster kubeconfig ready → DSC Helm install
+# → source registration → protection groups → (optional) backup + recovery
 #
 # After apply, exec into the DSC pod and run:
 #   getent hosts <brs_private_hostname>
@@ -162,96 +168,28 @@ data "ibm_container_cluster_config" "cluster_config" {
   endpoint_type     = var.cluster_config_endpoint_type != "default" ? var.cluster_config_endpoint_type : null
 }
 
-resource "time_sleep" "wait_operators" {
-  depends_on      = [data.ibm_container_cluster_config.cluster_config]
-  create_duration = "60s"
-}
-
 ##############################################################################
-# S2S IAM authorization policy  (target account)
+# BRS backup & recovery module
 #
-# Allows the VPC Infrastructure "endpoint-gateway" service in the source
-# account to access the BRS instance in the target account.  This policy
-# must exist before the VPEG is attached so the VPEG can resolve the BRS
-# CRN across account boundaries.
+# The default ibm provider (target account) handles all BRS resources:
+#   - BRS instance, data-source connection, registration token
+#   - S2S IAM authorization policy (via brs_source_account_id)
 #
-# Uses the terraform-ibm-modules/s2s-auth module which creates an
-# ibm_iam_authorization_policy resource via the default IBM provider
-# (= target account here).
-##############################################################################
-
-module "brs_s2s_auth" {
-  source  = "terraform-ibm-modules/s2s-auth/ibm"
-  version = "2.3.1"
-  # default ibm provider = target account
-
-  enable_cbr = false
-
-  service_map = {
-    "brs-vpe-s2s" = {
-      # Source side: VPC Infrastructure / endpoint-gateway in the SOURCE account
-      source_service_name       = "is"
-      source_resource_type      = "endpoint-gateway"
-      source_service_account_id = var.source_account_id
-
-      # Target side: this specific BRS instance in the TARGET account
-      target_service_name         = "backup-recovery"
-      target_resource_instance_id = module.backup_recovery.brs_instance_guid
-
-      roles       = ["Viewer"]
-      description = "Cross-account: VPC endpoint-gateway (acct ${var.source_account_id}) → BRS instance (acct target)"
-    }
-  }
-  # No explicit depends_on — the reference to module.backup_recovery.brs_instance_guid
-  # already creates an implicit dependency on the BRS instance output.
-  # An explicit depends_on = [module.backup_recovery] would force waiting for the
-  # ENTIRE module (including the VPEG that hasn't been created yet), deadlocking the apply.
-}
-
-##############################################################################
-# BRS backup & recovery module  (default provider = target account)
+# The ibm.cluster provider alias (source account) handles all cluster
+# and VPC resources:
+#   - cluster data sources, DSC worker pool, Helm chart, source registration
+#   - VPE Gateway (via create_brs_vpe = true + vpc_id / vpc_subnets)
 #
-# Design note — resource ordering for cross-account VPEG
-# -------------------------------------------------------
-# The VPEG requires an S2S IAM auth policy to exist BEFORE it is created,
-# because VPC resolves the BRS service CRN across account boundaries at
-# VPEG creation time.  Without the policy, the API returns:
-#   "Could not find service" (HTTP 400)
-#
-# The root module cannot enforce this ordering internally when the S2S auth
-# is created outside the module, so we split responsibilities:
-#
-#   module.backup_recovery  (create_brs_vpe = false)
-#     Default ibm provider (target account):
-#       BRS instance, data-source connection, protection policy.
-#     ibm.cluster provider (source account):
-#       cluster data sources, DSC worker pool, Helm chart, source registration.
-#
-#   module.brs_s2s_auth  (this file, target account)
-#     Cross-account IAM auth policy.
-#     Implicitly depends on module.backup_recovery.brs_instance_guid.
-#     No explicit depends_on needed — the reference is enough.
-#
-#   data.ibm_is_security_group.kube_vpeg_sg  (this file, source account)
-#     Reads the kube-vpegw-<vpc-id> SG that IKS creates on every VPC cluster.
-#
-#   module.brs_vpe  (this file, source account via ibm.source provider)
-#     VPEG creation.  depends_on = [module.brs_s2s_auth] enforces that S2S
-#     auth exists before VPC attempts to resolve the BRS CRN cross-account.
+# Resource ordering inside the root module:
+#   BRS instance → S2S auth → VPEG → Helm/DSC → source registration
 ##############################################################################
 
 module "backup_recovery" {
   source = "../.."
-  # BRS resources (ibm_backup_recovery_*, ibm_resource_instance)
-  # use the default ibm provider → target (BRS) account.
-  # Cluster/VPC resources (ibm_container_*, ibm_is_*, ibm_resource_tag on cluster)
-  # use ibm.cluster → source account, via the ibm.source alias defined in provider.tf.
   providers = {
-    ibm         = ibm        # target account  — BRS instance, connection
-    ibm.cluster = ibm.source # source account  — cluster data sources, DSC worker pool, tags
+    ibm         = ibm        # target account — BRS instance, connection, S2S auth
+    ibm.cluster = ibm.source # source account — cluster, DSC worker pool, VPEG
   }
-
-  depends_on = [time_sleep.wait_operators]
 
   # ---- Cluster (source account) ----
   cluster_id                   = local.cluster_id
@@ -259,7 +197,7 @@ module "backup_recovery" {
   cluster_config_endpoint_type = var.cluster_config_endpoint_type
   kube_type                    = "kubernetes"
   connection_env_type          = "kIksVpc"
-  ibmcloud_api_key             = var.ibmcloud_api_key # target account key used by scripts
+  ibmcloud_api_key             = var.ibmcloud_api_key
   region                       = local.brs_region
   dsc_storage_class            = "ibmc-vpc-block-metro-5iops-tier"
   dsc_worker_pool_zones        = 1
@@ -268,9 +206,7 @@ module "backup_recovery" {
 
   # ---- BRS instance (target account) ----
   # brs_resource_group_id points at the TARGET-account resource group so the
-  # BRS instance is created in the correct account. Without this, the root
-  # module would fall back to cluster_resource_group_id which belongs to the
-  # source account, causing the BRS instance to land in the wrong account.
+  # BRS instance lands in the correct account.
   brs_resource_group_id     = module.target_resource_group.resource_group_id
   existing_brs_instance_crn = var.existing_brs_instance_crn
   brs_instance_name         = "${var.prefix}-brs"
@@ -278,16 +214,25 @@ module "backup_recovery" {
   brs_create_new_connection = true
 
   # ---- Endpoint settings ----
-  # Use public endpoint so Terraform (running from workstation or CI) can
-  # reach the target-account BRS API.  DSC traffic routes via the VPEG.
+  # Use public endpoint so Terraform (CI/workstation) can reach the BRS API.
+  # DSC traffic routes privately via the VPE Gateway.
   brs_endpoint_type = "public"
 
-  # VPEG is created OUTSIDE this module call (see module.brs_vpe below) so
-  # the S2S auth policy can be enforced to exist before VPC resolves the BRS
-  # CRN cross-account.  Setting create_brs_vpe = false here skips the VPEG
-  # and the kube-vpegw SG lookup inside the root module.
-  create_brs_vpe        = false
-  brs_source_account_id = null
+  # ---- VPE Gateway + S2S authorization (cross-account) ----
+  # create_brs_vpe = true  → root module creates the VPEG in the source-account
+  #                          VPC (using ibm.cluster provider).
+  # brs_source_account_id  → root module creates the S2S IAM auth policy that
+  #                          allows the source-account VPEG to resolve the BRS
+  #                          CRN across account boundaries.  The policy is
+  #                          created before the VPEG via an internal dep chain.
+  # vpc_id / vpc_subnets   → supplied explicitly because the cluster is created
+  #                          in the same apply; auto-discovery from worker-pool
+  #                          data sources would be unknown at plan time.
+  create_brs_vpe        = true
+  brs_source_account_id = var.source_account_id
+  brs_vpe_name          = "${var.prefix}-brs-connection-vpe"
+  vpc_id                = local.vpc_id
+  vpc_subnets           = local.vpc_subnets
 
   # ---- Backup policy ----
   policies = [
@@ -308,58 +253,4 @@ module "backup_recovery" {
 
   resource_tags = var.resource_tags
   access_tags   = var.access_tags
-}
-
-##############################################################################
-# kube-vpegw security group lookup  (source account)
-#
-# IKS automatically creates a security group named kube-vpegw-<vpc-id> on
-# every VPC cluster.  It is pre-configured to allow cluster worker nodes to
-# reach VPE targets.  We attach the VPEG to this SG so no extra rules are
-# needed.
-##############################################################################
-
-data "ibm_is_security_group" "kube_vpeg_sg" {
-  provider = ibm.source
-  name     = "kube-vpegw-${local.vpc_id}"
-  depends_on = [
-    ibm_container_vpc_cluster.vpc_cluster,
-    data.ibm_container_vpc_cluster.vpc_cluster_data,
-  ]
-}
-
-##############################################################################
-# BRS Virtual Private Endpoint Gateway  (source account)
-#
-# Created AFTER module.brs_s2s_auth so the IAM policy exists before VPC
-# resolves the BRS service CRN cross-account.
-##############################################################################
-
-module "brs_vpe" {
-  source  = "terraform-ibm-modules/vpe-gateway/ibm"
-  version = "5.3.5"
-  providers = {
-    ibm = ibm.source # VPEG lives in the source-account VPC
-  }
-
-  region            = var.region
-  prefix            = var.prefix
-  vpc_name          = local.vpc_id
-  vpc_id            = local.vpc_id
-  subnet_zone_list  = local.vpc_subnets
-  resource_group_id = module.source_resource_group.resource_group_id
-
-  security_group_ids = [data.ibm_is_security_group.kube_vpeg_sg.id]
-
-  cloud_service_by_crn = [
-    {
-      crn          = module.backup_recovery.brs_instance_crn
-      service_name = "backup-recovery"
-      # Static string key — must not be derived from unknown-at-plan-time values.
-      vpe_name = "${var.prefix}-brs-connection-vpe"
-    }
-  ]
-
-  # S2S auth MUST exist before VPC can resolve the BRS CRN cross-account.
-  depends_on = [module.brs_s2s_auth]
 }

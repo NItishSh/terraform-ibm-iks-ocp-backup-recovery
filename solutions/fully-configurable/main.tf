@@ -52,49 +52,60 @@ locals {
 module "protect_cluster" {
   source = "../.."
   providers = {
-    ibm         = ibm
-    ibm.cluster = ibm
+    ibm         = ibm         # target (BRS) account — or only account in same-account mode
+    ibm.cluster = ibm.cluster # source (cluster/VPC) account — same as ibm when source_ibmcloud_api_key is null
   }
+  # --- Cluster ---
   cluster_id                   = var.cluster_id
   cluster_resource_group_id    = var.cluster_resource_group_id
   cluster_config_endpoint_type = var.cluster_config_endpoint_type
   add_dsc_rules_to_cluster_sg  = var.add_dsc_rules_to_cluster_sg
+  add_cluster_tags             = var.add_cluster_tags
   kube_type                    = var.kube_type
-  ibmcloud_api_key             = var.ibmcloud_api_key
+  wait_till                    = var.wait_till
+  wait_till_timeout            = var.wait_till_timeout
   # --- Deployment Mode ---
   deployment_mode = var.deployment_mode
-  # --- BRS Instance Details---
+  # --- BRS Instance ---
+  ibmcloud_api_key          = var.ibmcloud_api_key
   brs_endpoint_type         = var.brs_endpoint_type
   existing_brs_instance_crn = var.existing_brs_instance_crn
+  create_new_brs_instance   = var.create_new_brs_instance
   brs_instance_name         = var.brs_instance_name
-  # --- BRS Connection Details---
+  brs_resource_group_id     = var.brs_resource_group_id
+  region                    = local.region
+  # --- BRS Connection ---
   brs_connection_name       = var.brs_connection_name
   brs_create_new_connection = var.brs_create_new_connection
-  region                    = local.region
   connection_env_type       = var.connection_env_type
-  # --- Backup Policy ---
-  auto_protect_policy_name = var.auto_protect_policy_name
-  protection_groups        = var.protection_groups
-  wait_till                = var.wait_till
-  wait_till_timeout        = var.wait_till_timeout
+  # --- VPE + S2S (cross-account and same-account private routing) ---
+  create_brs_vpe        = var.create_brs_vpe
+  vpc_id                = var.vpc_id
+  vpc_subnets           = var.vpc_subnets
+  brs_source_account_id = var.brs_source_account_id
+  brs_vpe_name          = var.brs_vpe_name
   # --- Data Source Connector (DSC) ---
-  dsc_chart_uri           = var.dsc_chart_uri
-  dsc_name                = var.dsc_name
-  dsc_replicas            = var.dsc_replicas
-  dsc_namespace           = var.dsc_namespace
-  dsc_helm_timeout        = var.dsc_helm_timeout
-  dsc_storage_class       = var.dsc_storage_class
-  create_dsc_worker_pool  = var.create_dsc_worker_pool
-  dsc_worker_pool_flavor  = var.dsc_worker_pool_flavor
-  dsc_pod_cpu_limits      = var.dsc_pod_cpu_limits
-  dsc_pod_memory_limits   = var.dsc_pod_memory_limits
-  dsc_pod_cpu_requests    = var.dsc_pod_cpu_requests
-  dsc_pod_memory_requests = var.dsc_pod_memory_requests
+  install_required_binaries = var.install_required_binaries
+  dsc_chart_uri             = var.dsc_chart_uri
+  dsc_name                  = var.dsc_name
+  dsc_replicas              = var.dsc_replicas
+  dsc_namespace             = var.dsc_namespace
+  dsc_helm_timeout          = var.dsc_helm_timeout
+  dsc_storage_class         = var.dsc_storage_class
+  create_dsc_worker_pool    = var.create_dsc_worker_pool
+  dsc_worker_pool_zones     = var.dsc_worker_pool_zones
+  dsc_worker_pool_flavor    = var.dsc_worker_pool_flavor
+  dsc_pod_cpu_limits        = var.dsc_pod_cpu_limits
+  dsc_pod_memory_limits     = var.dsc_pod_memory_limits
+  dsc_pod_cpu_requests      = var.dsc_pod_cpu_requests
+  dsc_pod_memory_requests   = var.dsc_pod_memory_requests
   # --- Registration Settings ---
   registration_images = var.registration_images
   enable_auto_protect = var.enable_auto_protect
-  # --- Policies ---
-  policies = var.policies
+  # --- Backup Policy ---
+  auto_protect_policy_name = var.auto_protect_policy_name
+  protection_groups        = var.protection_groups
+  policies                 = var.policies
   # --- Resource Tags ---
   resource_tags = var.resource_tags
   access_tags   = var.access_tags
@@ -165,8 +176,8 @@ module "target_cluster_registration" {
   source = "../.."
 
   providers = {
-    ibm         = ibm
-    ibm.cluster = ibm
+    ibm         = ibm         # target (BRS) account
+    ibm.cluster = ibm.cluster # source (cluster/VPC) account — same as ibm when source_ibmcloud_api_key is null
     helm        = helm.target
     kubernetes  = kubernetes.target
   }

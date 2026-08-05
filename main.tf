@@ -619,6 +619,12 @@ resource "helm_release" "data_source_connector" {
     terraform_data.purge_stale_dsc_pvc,
     ibm_container_vpc_worker_pool.data_source_connector,
     kubernetes_namespace_v1.dsc_namespace,
+    # Ensure the VPE Gateway is live before the DSC pod starts.
+    # When create_brs_vpe = true, the VPEG is module.brs_vpe[0]; DSC traffic
+    # routes to BRS via the VPEG private endpoint immediately on pod startup.
+    # When create_brs_vpe = false (cross-account, VPEG managed externally),
+    # module.brs_vpe has count = 0 so this dep is a no-op — safe in all configs.
+    module.brs_vpe,
   ]
 
   lifecycle {

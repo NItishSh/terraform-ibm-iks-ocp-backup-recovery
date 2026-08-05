@@ -53,21 +53,28 @@
                 "crn:v1:bluemix:public:iam::::role:Editor"
               ],
               "service_name": "containers-kubernetes",
-              "notes": "Required to deploy helm charts and manage Kubernetes resources on IKS and Red Hat OpenShift clusters."
+              "notes": "Required to deploy Helm charts, manage Kubernetes resources, and create dedicated worker pools on IKS and Red Hat OpenShift clusters."
             },
             {
               "role_crns": [
                 "crn:v1:bluemix:public:iam::::role:Editor"
               ],
               "service_name": "is.vpc",
-              "notes": "Required for creating Security group rules in Virtual Private Cloud(VPC)."
+              "notes": "Required for creating Security Group rules, Virtual Private Endpoint Gateways (VPEGs), and reserved IPs in Virtual Private Cloud (VPC). When create_brs_vpe is true, the deploying identity must hold this role in the source (cluster) account."
             },
             {
               "role_crns": [
                 "crn:v1:bluemix:public:iam::::role:Editor"
               ],
               "service_name": "backup-recovery",
-              "notes": "Required to create and manage Backup and Recovery policy, source registration and protection group."
+              "notes": "Required to create and manage Backup and Recovery service instances, connections, protection policies, source registrations, and protection groups."
+            },
+            {
+              "role_crns": [
+                "crn:v1:bluemix:public:iam::::role:Administrator"
+              ],
+              "service_name": "iam-identity",
+              "notes": "Required to create IAM service-to-service (S2S) authorization policies. When brs_source_account_id is set (cross-account VPE), the deploying identity in the target (BRS) account must hold Administrator on IAM Identity Services to allow the source-account VPC endpoint-gateway to access the BRS instance."
             }
           ],
           "architecture": {
@@ -92,6 +99,11 @@
             {
               "key": "ibmcloud_api_key",
               "required": true
+            },
+            {
+              "key": "source_ibmcloud_api_key",
+              "display_name": "Source Account API Key",
+              "description": "IBM Cloud API key for the source (cluster/VPC) account. Required only for cross-account deployments where the BRS instance lives in a different account from the cluster. Leave empty for same-account deployments."
             },
             {
               "key": "region",
@@ -549,6 +561,73 @@
               "hidden": {
                 "deployment_mode": "backup_only"
               }
+            },
+            {
+              "key": "brs_resource_group_id",
+              "display_name": "BRS Instance Resource Group",
+              "description": "Resource group ID for the BRS instance. Leave empty for same-account deployments (defaults to cluster resource group). Set for cross-account deployments where the BRS instance is in a different account.",
+              "custom_config": {
+                "type": "resource_group",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "identifier": "rg_id"
+                }
+              }
+            },
+            {
+              "key": "add_cluster_tags",
+              "display_name": "Add BRS Tags to Cluster"
+            },
+            {
+              "key": "install_required_binaries",
+              "display_name": "Install Required Binaries",
+              "description": "When true, automatically installs kubectl, jq, ibmcloud CLI, and backup-recovery plugin if not found on the runtime."
+            },
+            {
+              "key": "create_brs_vpe",
+              "display_name": "Create BRS VPE Gateway",
+              "description": "Create a Virtual Private Endpoint Gateway to route cluster-to-BRS traffic over the IBM private backbone. For cross-account setups, also set 'BRS Source Account ID'."
+            },
+            {
+              "key": "vpc_id",
+              "display_name": "VPC ID (for VPE)",
+              "description": "VPC ID for the BRS VPE Gateway. Auto-discovered from the cluster when omitted."
+            },
+            {
+              "key": "vpc_subnets",
+              "display_name": "VPC Subnets (for VPE)",
+              "description": "Subnets to bind VPE reserved IPs. Auto-discovered from the cluster when omitted.",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "brs_source_account_id",
+              "display_name": "BRS Source Account ID",
+              "description": "IBM Cloud account ID of the account where the cluster and VPC reside. Required for cross-account setups to create the S2S IAM authorization policy."
+            },
+            {
+              "key": "brs_vpe_name",
+              "display_name": "BRS VPE Gateway Name",
+              "description": "Override the auto-generated name for the BRS VPE Gateway."
+            },
+            {
+              "key": "create_new_brs_instance",
+              "display_name": "Create New BRS Instance",
+              "description": "Explicitly control whether a new BRS instance is provisioned. Leave empty to auto-detect from 'Backup Recovery Service Instance'."
+            },
+            {
+              "key": "dsc_worker_pool_zones",
+              "display_name": "DSC Worker Pool Zones",
+              "description": "Number of zones for the DSC worker pool (1–3). Use 2 or 3 for multi-zone HA."
             }
           ],
           "dependencies": [],

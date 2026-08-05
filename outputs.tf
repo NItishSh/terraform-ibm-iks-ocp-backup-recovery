@@ -90,3 +90,8 @@ output "brs_vpe_ips" {
   description = "Map of VPEG name to reserved IP list. Populated only when create_brs_vpe = true; empty map otherwise. Each entry contains the private IPs bound to each subnet zone."
   value       = var.create_brs_vpe && local.is_vpc ? module.brs_vpe[0].vpe_ips : {}
 }
+
+output "s2s_auth_policies" {
+  description = "S2S IAM authorization policies created in this account. Populated only when brs_source_account_id is set (cross-account VPE); empty map otherwise."
+  value       = var.brs_source_account_id != null && var.create_brs_vpe ? module.brs_s2s_auth[0].auth_policies : {}
+}

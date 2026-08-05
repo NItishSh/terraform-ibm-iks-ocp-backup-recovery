@@ -4,8 +4,15 @@
 
 variable "ibmcloud_api_key" {
   type        = string
-  description = "The IBM Cloud API key."
+  description = "The IBM Cloud API key for the target (BRS) account. In same-account deployments this key is used for all resources."
   sensitive   = true
+}
+
+variable "source_ibmcloud_api_key" {
+  type        = string
+  description = "IBM Cloud API key for the source (cluster/VPC) account. Required only for cross-account deployments where the BRS instance lives in a different account from the cluster. When null (default), the default `ibmcloud_api_key` is used for both accounts."
+  sensitive   = true
+  default     = null
 }
 
 variable "provider_visibility" {
@@ -30,6 +37,25 @@ variable "cluster_id" {
 variable "cluster_resource_group_id" {
   type        = string
   description = "The resource group ID of the cluster."
+}
+
+variable "brs_resource_group_id" {
+  description = "Resource group ID in which to create the BRS instance. Defaults to `cluster_resource_group_id` when null (same-account deployments). Set this to a resource group in the target account when the BRS instance lives in a different IBM Cloud account from the cluster."
+  type        = string
+  default     = null
+}
+
+variable "add_cluster_tags" {
+  description = "Whether to add BRS tags to the cluster. Set to false if you manage cluster tags externally to avoid drift. When false, you should manually add the tags 'brs-region:<region>' and 'brs-guid:<guid>' to your cluster."
+  type        = bool
+  default     = true
+}
+
+variable "install_required_binaries" {
+  type        = bool
+  default     = true
+  description = "When set to true, a script will run to check if `kubectl` and `jq`, `IBM Cloud CLI (ibmcloud)`, and the `backup-recovery plugin` exist on the runtime and if not attempt to download them from the public internet and install them to /tmp. Set to false to skip running this script."
+  nullable    = false
 }
 
 variable "cluster_config_endpoint_type" {
@@ -449,6 +475,59 @@ variable "brs_create_new_connection" {
   description = "Flag to create a new connection from the Backup & Recovery Service instance to the cluster. When set to `true` (default), a new connection is created with the name specified in `brs_connection_name`. When `false`, it uses an existing connection matching `brs_connection_name`."
   default     = true
   nullable    = false
+}
+
+variable "create_new_brs_instance" {
+  description = "Whether to provision a new Backup & Recovery Service instance. Leave as `null` (default) to infer the behaviour from `existing_brs_instance_crn` (a new instance is created when the CRN is not provided). Set to `false` to reuse an existing instance whose CRN is only known after apply."
+  type        = bool
+  default     = null
+}
+
+variable "create_brs_vpe" {
+  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) that routes traffic from the cluster VPC to the BRS instance over the IBM private backbone. For existing clusters, vpc_id and vpc_subnets are auto-discovered from the cluster's worker pools. When creating a new cluster in the same apply, supply vpc_id and vpc_subnets explicitly. For cross-account setups (BRS in a different IBM Cloud account), also provide brs_source_account_id to create the required S2S IAM authorization policy."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC where the BRS Virtual Private Endpoint Gateway will be created. Optional when create_brs_vpe is true — when omitted the VPC ID is auto-discovered from the cluster's worker-pool subnets. Supply this explicitly only when the auto-discovery would pick the wrong VPC."
+  type        = string
+  default     = null
+}
+
+variable "vpc_subnets" {
+  description = "List of subnets in which to bind reserved IPs for the BRS VPE Gateway. Each entry must have 'name', 'id', and 'zone'. Optional when create_brs_vpe is true — when omitted all subnets in the cluster VPC are discovered automatically."
+  type = list(object({
+    name = string
+    id   = string
+    zone = string
+  }))
+  default  = []
+  nullable = false
+}
+
+variable "brs_source_account_id" {
+  description = "IBM Cloud account ID of the account where the IKS/ROKS cluster (and its VPC) reside. Required only for cross-account setups where the BRS instance is in a different account. When provided, an S2S IAM authorization policy is created in the BRS account allowing VPC Infrastructure Services (endpoint-gateway) in the source account to access the BRS instance. Leave null for same-account deployments."
+  type        = string
+  default     = null
+}
+
+variable "brs_vpe_name" {
+  description = "Override the name of the BRS Virtual Private Endpoint Gateway. If null, the name is auto-generated as '<brs_connection_name>-vpe'."
+  type        = string
+  default     = null
+}
+
+variable "dsc_worker_pool_zones" {
+  description = "Number of zones to create worker pools in. Defaults to 1 for single-zone deployments. Set to 2 or 3 for multi-zone high availability. Must be between 1 and 3."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.dsc_worker_pool_zones >= 1 && var.dsc_worker_pool_zones <= 3
+    error_message = "dsc_worker_pool_zones must be between 1 and 3."
+  }
 }
 
 variable "region" {

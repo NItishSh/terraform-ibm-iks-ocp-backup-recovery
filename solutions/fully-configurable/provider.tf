@@ -1,9 +1,35 @@
 ########################################################################################################################
 # Provider config
+#
+# Two deployment modes are supported:
+#
+#   Same-account (source_ibmcloud_api_key = null, the default)
+#     The default ibm provider and ibm.cluster both use ibmcloud_api_key.
+#     BRS instance, S2S auth policy, cluster, VPC, and VPEG all live in the
+#     same account.
+#
+#   Cross-account (source_ibmcloud_api_key set)
+#     ibm          → target account (ibmcloud_api_key)
+#                    BRS instance, connection, S2S IAM authorization policy.
+#     ibm.cluster  → source account (source_ibmcloud_api_key)
+#                    Cluster, VPC, VPEG, DSC worker pool, Helm chart.
+#
+# The kubernetes and helm providers always point at the source-account cluster
+# kubeconfig so the DSC Helm chart is deployed into the correct cluster.
 ########################################################################################################################
 
+# Default provider — target (BRS) account, or only account in same-account mode.
 provider "ibm" {
   ibmcloud_api_key = var.ibmcloud_api_key
+  visibility       = var.provider_visibility
+}
+
+# Cluster provider alias — source (cluster/VPC) account.
+# When source_ibmcloud_api_key is null (same-account), this falls back to
+# ibmcloud_api_key so the alias is always valid regardless of deployment mode.
+provider "ibm" {
+  alias            = "cluster"
+  ibmcloud_api_key = var.source_ibmcloud_api_key != null ? var.source_ibmcloud_api_key : var.ibmcloud_api_key
   visibility       = var.provider_visibility
 }
 
