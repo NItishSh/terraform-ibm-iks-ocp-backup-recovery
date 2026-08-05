@@ -595,6 +595,32 @@
             {
               "key": "dsc_worker_pool_zones",
               "display_name": "DSC Worker Pool Zones"
+            },
+            {
+              "key": "target_create_brs_vpe",
+              "display_name": "Create BRS VPE Gateway (Target Cluster)"
+            },
+            {
+              "key": "target_vpc_id",
+              "display_name": "VPC ID - Target Cluster (for VPE)"
+            },
+            {
+              "key": "target_vpc_subnets",
+              "display_name": "VPC Subnets - Target Cluster (for VPE)",
+              "custom_config": {
+                "type": "code_editor",
+                "grouping": "deployment",
+                "original_grouping": "deployment",
+                "config_constraints": {
+                  "supportedLanguages": [
+                    "hcl"
+                  ]
+                }
+              }
+            },
+            {
+              "key": "target_brs_vpe_name",
+              "display_name": "BRS VPE Gateway Name (Target Cluster)"
             }
           ],
           "dependencies": [],

@@ -218,6 +218,13 @@ module "target_cluster_registration" {
   policies          = []
   protection_groups = null
 
+  # --- VPE (target cluster's own VPC — needed when target is in a different VPC from source) ---
+  create_brs_vpe        = var.target_create_brs_vpe
+  vpc_id                = var.target_vpc_id
+  vpc_subnets           = var.target_vpc_subnets
+  brs_source_account_id = var.brs_source_account_id
+  brs_vpe_name          = var.target_brs_vpe_name
+
   # Tags
   resource_tags = var.resource_tags
   access_tags   = var.access_tags

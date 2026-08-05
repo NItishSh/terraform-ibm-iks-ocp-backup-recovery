@@ -1003,3 +1003,33 @@ variable "target_create_dsc_worker_pool" {
   default     = true
   nullable    = false
 }
+
+variable "target_create_brs_vpe" {
+  description = "Set to true to create a Virtual Private Endpoint Gateway (VPEG) in the target cluster's VPC, routing its DSC traffic to the BRS instance over the IBM private backbone. Required when the target cluster is in a different VPC from the source cluster and private connectivity is needed. Mirrors create_brs_vpe but applies to the target cluster registration."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "target_vpc_id" {
+  description = "ID of the VPC where the target cluster's BRS Virtual Private Endpoint Gateway will be created. Optional when target_create_brs_vpe is true — when omitted the VPC ID is auto-discovered from the target cluster's worker-pool subnets. Supply explicitly only when auto-discovery would pick the wrong VPC."
+  type        = string
+  default     = null
+}
+
+variable "target_vpc_subnets" {
+  description = "List of subnets in which to bind reserved IPs for the target cluster's BRS VPE Gateway. Each entry must have 'name', 'id', and 'zone'. Optional when target_create_brs_vpe is true — when omitted all subnets in the target cluster VPC are discovered automatically."
+  type = list(object({
+    name = string
+    id   = string
+    zone = string
+  }))
+  default  = []
+  nullable = false
+}
+
+variable "target_brs_vpe_name" {
+  description = "Override the name of the BRS Virtual Private Endpoint Gateway for the target cluster. If null, the name is auto-generated as '<target_brs_connection_name>-vpe'."
+  type        = string
+  default     = null
+}
