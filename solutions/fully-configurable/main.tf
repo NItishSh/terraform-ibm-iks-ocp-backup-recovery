@@ -284,7 +284,7 @@ resource "terraform_data" "wait_for_backup" {
   }
 
   provisioner "local-exec" {
-    command     = "${path.module}/../../scripts/wait_for_backup_run.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.instance_id}' \"$BRS_PG_ID\" '${self.input.timeout_minutes}' '${self.input.poll_interval_seconds}' '${self.input.binaries_path}' > /tmp/backup_snapshot_${self.input.instance_id}.json"
+    command     = "${path.module}/../../scripts/wait_for_backup_run.sh '${self.input.url}' '${self.input.tenant}' '${self.input.endpoint_type}' '${self.input.instance_id}' $BRS_PG_ID '${self.input.timeout_minutes}' '${self.input.poll_interval_seconds}' '${self.input.binaries_path}' > /tmp/backup_snapshot_${self.input.instance_id}.json"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       IBMCLOUD_API_KEY = self.input.api_key # pragma: allowlist secret

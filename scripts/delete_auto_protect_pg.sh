@@ -281,20 +281,30 @@ check_and_cancel() {
 }
 
 # Returns 0 when active work exists, 1 when all runs are terminal.
+# "Canceling" archival tasks are excluded — they are already being cancelled
+# and BRS may take many minutes to complete the cancellation; treating them
+# as "active" would cause the 20-min wait to always timeout.
 has_active_work() {
   local backup_data archival_data backup_count archival_count
   backup_data=$(pg_active_backup_runs)
   archival_data=$(pg_active_archival_runs)
 
+  # Backup runs: exclude any run that is already in Canceling state
   backup_count=$(echo "$backup_data" | jq '
-    [ (.runs // [])[] | select(.status != null and .status != "") ] | length' \
+    [ (.runs // [])[] |
+      select(.status != null and .status != "" and (.status | test("Canceling") | not))
+    ] | length' \
     2>/dev/null) || backup_count=0
   [[ "${backup_count}" =~ ^[0-9]+$ ]] || backup_count=0
 
+  # Archival tasks: exclude Canceling (mirrors check_and_cancel filter)
   archival_count=$(echo "$archival_data" | jq '
     [ (.runs // [])[] |
       (.archivalInfo.archivalTargetResults // [])[] |
-      select(.archivalTaskId != null and .archivalTaskId != "")
+      select(
+        .archivalTaskId != null and .archivalTaskId != "" and
+        .status != null and (.status | test("Canceling") | not)
+      )
     ] | length' \
     2>/dev/null) || archival_count=0
   [[ "${archival_count}" =~ ^[0-9]+$ ]] || archival_count=0
@@ -307,22 +317,23 @@ has_active_work() {
 # ---------------------------------------------------------------------------
 pg_delete() {
   echo "Deleting protection group ${API_PG_ID}..." >&2
-  local delete_out
+  local delete_out rc
   delete_out=$(ibmcloud backup-recovery protection-group delete \
     --id "${API_PG_ID}" \
     --xibm-tenant-id "${TENANT}" \
     --delete-snapshots=true \
     --force \
-    -q 2>&1) || {
-    # CLI exits non-zero for 404 — treat as already gone.
+    -q 2>&1); rc=$?
+  vlog "protection-group delete" "${delete_out}"
+  if [[ $rc -ne 0 ]]; then
     if echo "${delete_out}" | grep -qi "not found\|404\|does not exist"; then
       echo "Protection group already gone." >&2
-      return 0
+    else
+      echo "WARNING: Delete request exited $rc — ${delete_out}" >&2
+      echo "Continuing destroy despite delete failure (non-fatal)." >&2
     fi
-    echo "Delete failed: ${delete_out}" >&2
-    return 1
-  }
-  vlog "protection-group delete" "${delete_out}"
+    return 0
+  fi
   echo "Protection group ${API_PG_ID} deleted." >&2
 }
 
