@@ -123,14 +123,22 @@ module "protect_cluster" {
 ##############################################################################
 
 locals {
-  # Determine which protection group to use for recovery
-  # Only applicable in full_backup_recovery mode
+  # Determine which explicitly Terraform-managed protection group to use for
+  # recovery lookup. Only meaningful when protection_groups are defined —
+  # auto-protect PGs are BRS-named (e.g. "AutoProtectK8s-060826-0707") and have
+  # no relation to auto_protect_policy_name. For auto-protect, the real PG ID
+  # comes from the auto_protect_pg_id output directly; recovery_pg_name is only
+  # used to look up the protection_group_ids map and to build a label string.
   recovery_pg_name = local.is_full_recovery ? (
     var.recovery_protection_group_name != null ? var.recovery_protection_group_name :
     try(length(var.protection_groups), 0) > 0 ? var.protection_groups[0].name :
-    var.auto_protect_policy_name
+    null # auto-protect: no Terraform-managed PG name — pg_id comes from auto_protect_pg_id output
   ) : null
 
+  # Human-readable label used in recovery resource names. Falls back to
+  # "auto-protect" so the name is meaningful rather than using the policy name
+  # (which has no relation to the BRS-assigned PG name).
+  recovery_pg_label = local.recovery_pg_name != null ? local.recovery_pg_name : "auto-protect"
 }
 
 ##############################################################################
@@ -274,9 +282,9 @@ resource "terraform_data" "wait_for_backup" {
     # string) so that a null/unknown value at plan time does not cause
     # "Cannot include a null value in a string template".
     protection_group_id = coalesce(
-      # explicit PG from for_each (used when protection_groups var is set)
-      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
-      # auto-protect PG (used when enable_auto_protect=true)
+      # explicit Terraform-managed PG (only when recovery_pg_name is non-null)
+      local.recovery_pg_name != null ? try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null) : null,
+      # auto-protect PG — BRS-assigned ID, no relation to policy name
       module.protect_cluster.auto_protect_pg_id,
       # plan-time placeholder — replaced by the real value at apply
       ""
@@ -306,13 +314,13 @@ resource "terraform_data" "same_cluster_recovery" {
     endpoint_type = var.brs_endpoint_type
     instance_id   = module.protect_cluster.brs_instance_guid
     source_pg_id = coalesce(
-      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
+      local.recovery_pg_name != null ? try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null) : null,
       module.protect_cluster.auto_protect_pg_id,
       ""
     )
     target_source_id = split("::", module.protect_cluster.source_registration_id)[1]
     api_key          = sensitive(var.ibmcloud_api_key)
-    recovery_name    = "recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
+    recovery_name    = "recovery-${local.recovery_pg_label}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
     binaries_path    = "/tmp"
     namespace_prefix = var.recovery_namespace_prefix
   }
@@ -356,13 +364,13 @@ resource "terraform_data" "cross_cluster_recovery" {
     endpoint_type = var.brs_endpoint_type
     instance_id   = module.protect_cluster.brs_instance_guid
     source_pg_id = coalesce(
-      try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null),
+      local.recovery_pg_name != null ? try(module.protect_cluster.protection_group_ids[local.recovery_pg_name], null) : null,
       module.protect_cluster.auto_protect_pg_id,
       ""
     )
     target_source_id = split("::", module.target_cluster_registration[0].source_registration_id)[1]
     api_key          = sensitive(var.ibmcloud_api_key)
-    recovery_name    = "cross-cluster-recovery-${local.recovery_pg_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
+    recovery_name    = "cross-cluster-recovery-${local.recovery_pg_label}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
     binaries_path    = "/tmp"
     namespace_prefix = var.recovery_namespace_prefix
   }
