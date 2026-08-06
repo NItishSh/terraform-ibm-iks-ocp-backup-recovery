@@ -917,9 +917,18 @@ variable "recovery_namespace_prefix" {
 }
 
 variable "recovery_protection_group_name" {
-  description = "Name of the protection group to recover from. If null, uses the first protection group defined in the configuration."
+  description = "Name of the Terraform-managed protection group to recover from when `deployment_mode` is `full_backup_recovery` and `protection_groups` contains more than one entry. When null and only one protection group is defined, that group is used automatically. When null and `enable_auto_protect` is true, the BRS auto-protect group is used. **Required** when `protection_groups` has more than one entry — omitting it will silently recover from the first group."
   type        = string
   default     = null
+
+  validation {
+    condition = !(
+      var.recovery_protection_group_name == null &&
+      var.deployment_mode == "full_backup_recovery" &&
+      try(length(var.protection_groups), 0) > 1
+    )
+    error_message = "When deployment_mode is 'full_backup_recovery' and more than one protection_group is defined, you must set recovery_protection_group_name to specify which group to recover from."
+  }
 }
 
 variable "recovery_wait_timeout_minutes" {
