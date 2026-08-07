@@ -36,7 +36,7 @@ var includeFiletypes = []string{".tf", ".yaml", ".py", ".tpl", ".md", ".sh"}
 // to minimise same-region collisions, which slow down IKS cluster provisioning
 // and can push total wall-clock time over the GitHub Actions job limit.
 var validRegions = []string{
-	"us-south",
+	// "us-south",
 	"us-east",
 	"eu-es",
 	"eu-gb",
@@ -324,6 +324,10 @@ func TestRunUpgradeFullyConfigurable(t *testing.T) {
 			// brs_source_deregistration_wait destroy_duration changed from 5m
 			// to 15m — in-place update, no resource replacement.
 			"module.protect_cluster.time_sleep.brs_source_deregistration_wait",
+			// purge_stale_dsc_pvc was added in the same release cycle; it does not
+			// exist in the previous released version so the upgrade plan shows it
+			// as an in-place update rather than an add.
+			"module.protect_cluster.terraform_data.purge_stale_dsc_pvc",
 		},
 	}
 

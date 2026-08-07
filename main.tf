@@ -654,10 +654,31 @@ data "ibm_backup_recovery_protection_sources" "sources" {
 }
 
 locals {
-  # Flatten protection sources up to 3 levels deep to create a comprehensive map of object names (namespaces, PVCs, etc.) to IDs
+  # Flatten protection sources up to 3 levels deep to create a map of object names
+  # (namespaces, PVCs, etc.) to IDs — scoped to THIS cluster's registered source only.
+
+  # Pre-compute the set of all node-level source IDs present in the current API response.
+  all_known_source_ids = toset(flatten([
+    for env in(try(data.ibm_backup_recovery_protection_sources.sources.protection_sources, []) != null ? data.ibm_backup_recovery_protection_sources.sources.protection_sources : []) :
+    [for node in(env.nodes != null ? env.nodes : []) :
+      tostring(node.protection_source[0].id)
+      if node.protection_source != null && length(node.protection_source) > 0
+    ]
+  ]))
+
+  filter_by_source_id = (
+    ibm_backup_recovery_source_registration.source_registration.source_id != null &&
+    contains(local.all_known_source_ids, tostring(ibm_backup_recovery_source_registration.source_registration.source_id))
+  )
+
   all_env_nodes = flatten([
     for env in(try(data.ibm_backup_recovery_protection_sources.sources.protection_sources, []) != null ? data.ibm_backup_recovery_protection_sources.sources.protection_sources : []) :
-    (env.nodes != null ? env.nodes : [])
+    [for node in(env.nodes != null ? env.nodes : []) : node
+      if !local.filter_by_source_id ||
+      (node.protection_source != null &&
+        length(node.protection_source) > 0 &&
+      tostring(node.protection_source[0].id) == tostring(ibm_backup_recovery_source_registration.source_registration.source_id))
+    ]
   ])
 
   all_l1_ps = flatten([
