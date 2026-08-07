@@ -786,7 +786,7 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   depends_on = [
     helm_release.data_source_connector,
     time_sleep.wait_for_dsc_stabilization,
-    time_sleep.brs_source_deregistration_wait,
+    terraform_data.brs_source_deregistration_wait,
     module.backup_recovery_instance,
   ]
 
@@ -801,18 +801,29 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
   }
 }
 
-# BRS source deregistration is async on the backend. Without this sleep,
-# DeleteDataSourceConnectionWithContext fails with "can't be deleted as it is
-# being used by the source" because the connection is still referenced when
-# the DSC connection cleanup script runs on the BRS instance side.
-# destroy_duration fires between source_registration destruction and the
-# namespace wait, giving BRS time to process the async deregistration.
-# 20m: BRS backend globally releases the cluster endpoint registration only
-# after full internal cleanup; 10m was not sufficient — consecutive runs on
-# the same cluster hit "already registered to brs-backup-agent-<id>" errors.
-resource "time_sleep" "brs_source_deregistration_wait" {
-  depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "20m"
+# Poll until BRS confirms the source registration is fully gone before
+# proceeding with DSC / connection teardown.  Replaces the old blind 20-minute
+# time_sleep: deregistration usually completes in 3–8 minutes but can take
+# longer; polling exits as soon as the ID disappears from registrations-list.
+resource "terraform_data" "brs_source_deregistration_wait" {
+  depends_on = [terraform_data.wait_before_helm_destroy]
+
+  input = {
+    region          = local.brs_instance_region
+    tenant_id       = local.brs_tenant_id
+    registration_id = tostring(ibm_backup_recovery_source_registration.source_registration.source_id)
+    brs_endpoint    = local.backup_recovery_instance_public_url
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-c"]
+    # Script signature: REGION TENANT REGISTRATION_ID BRS_ENDPOINT [TIMEOUT_S] [POLL_S]
+    command = "${path.module}/scripts/wait-for-deregistration.sh '${try(self.input.region, "")}' '${try(self.input.tenant_id, "")}' '${try(self.input.registration_id, "")}' '${try(self.input.brs_endpoint, "")}'"
+    environment = {
+      IBMCLOUD_API_KEY = var.ibmcloud_api_key # pragma: allowlist secret
+    }
+  }
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.
@@ -852,20 +863,44 @@ resource "terraform_data" "wait_before_helm_destroy" {
   }
 }
 
-# Wait for BRS asynchronous discovery to stabilize before reading protection sources.
-resource "time_sleep" "wait_for_source_discovery" {
+# Poll the BRS protection-sources API until the DSC initial discovery pass is
+# complete — i.e., until the registered cluster appears as a source node with
+# at least one child object (namespace or PVC).  This replaces the old blind
+# time_sleep which was either too short (sources empty) or wasteful (waited
+# long after discovery had already finished).
+#
+# The script calls `ibmcloud backup-recovery protection-source list` every 30 s
+# and exits 0 as soon as children are visible, or exits 1 after a configurable
+# timeout (default 30 min).  Terraform will surface the timeout as a clear
+# error rather than a silent precondition failure.
+resource "terraform_data" "wait_for_source_discovery" {
   depends_on = [
     ibm_backup_recovery_source_registration.source_registration,
     helm_release.data_source_connector,
     terraform_data.install_dependencies
   ]
 
-  triggers = {
+  triggers_replace = {
     connection_id = local.connection_id
     dsc_version   = var.dsc_chart_uri
+    source_id     = tostring(ibm_backup_recovery_source_registration.source_registration.source_id)
   }
 
-  create_duration = "10m"
+  input = {
+    region           = local.brs_instance_region
+    tenant_id        = local.brs_tenant_id
+    registration_id  = tostring(ibm_backup_recovery_source_registration.source_registration.source_id)
+    brs_endpoint     = local.backup_recovery_instance_public_url
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    # Script signature: REGION TENANT REGISTRATION_ID BRS_ENDPOINT [TIMEOUT_S] [POLL_S]
+    command = "${path.module}/scripts/wait-for-source-discovery.sh '${self.input.region}' '${self.input.tenant_id}' '${self.input.registration_id}' '${self.input.brs_endpoint}'"
+    environment = {
+      IBMCLOUD_API_KEY = var.ibmcloud_api_key # pragma: allowlist secret
+    }
+  }
 }
 
 data "ibm_backup_recovery_protection_sources" "sources" {
@@ -875,7 +910,7 @@ data "ibm_backup_recovery_protection_sources" "sources" {
   region          = local.brs_instance_region
   endpoint_type   = var.brs_endpoint_type
 
-  depends_on = [time_sleep.wait_for_source_discovery]
+  depends_on = [terraform_data.wait_for_source_discovery]
 }
 
 locals {
@@ -1229,7 +1264,7 @@ resource "ibm_backup_recovery_protection_group" "protection_group" {
 
   depends_on = [
     data.ibm_backup_recovery_protection_sources.sources,
-    time_sleep.wait_for_source_discovery
+    terraform_data.wait_for_source_discovery
   ]
 
   lifecycle {
@@ -1341,7 +1376,7 @@ resource "time_sleep" "wait_for_pg_registration" {
 
   depends_on = [
     ibm_backup_recovery_protection_group.protection_group,
-    time_sleep.wait_for_source_discovery
+    terraform_data.wait_for_source_discovery
   ]
 
   create_duration = "90s" # Increased to 90s to match solution wrapper
@@ -1371,7 +1406,7 @@ resource "terraform_data" "trigger_backup_run" {
 
   depends_on = [
     ibm_backup_recovery_protection_group.protection_group,
-    time_sleep.wait_for_source_discovery,
+    terraform_data.wait_for_source_discovery,
     time_sleep.wait_for_pg_registration,
     terraform_data.install_dependencies
   ]
@@ -1410,7 +1445,7 @@ resource "terraform_data" "wait_for_backup_run" {
 
   depends_on = [
     ibm_backup_recovery_protection_group.protection_group,
-    time_sleep.wait_for_source_discovery,
+    terraform_data.wait_for_source_discovery,
     terraform_data.trigger_backup_run,
     terraform_data.install_dependencies
   ]
