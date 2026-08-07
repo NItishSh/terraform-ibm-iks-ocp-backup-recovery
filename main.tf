@@ -13,7 +13,7 @@ locals {
   deploy_recovery = var.deployment_mode == "full_backup_recovery"
 
   # --- BRS region: cluster region for new instances, existing instance region otherwise ---
-  brs_region = var.existing_brs_instance_crn != null && var.existing_brs_instance_crn != "null" && var.existing_brs_instance_crn != "" ? split(":", var.existing_brs_instance_crn)[5] : var.region
+  brs_region = var.existing_brs_instance_crn != null && var.existing_brs_instance_crn != "" ? split(":", var.existing_brs_instance_crn)[5] : var.region
 
   # --- Cluster attributes (resolved from VPC or Classic data sources) ---
   cluster_crn                  = local.is_vpc ? data.ibm_container_vpc_cluster.vpc_cluster[0].crn : data.ibm_container_cluster.classic_cluster[0].crn
@@ -80,7 +80,7 @@ resource "terraform_data" "install_dependencies" {
 module "crn_parser" {
   source  = "terraform-ibm-modules/common-utilities/ibm//modules/crn-parser"
   version = "1.5.0"
-  crn     = var.existing_brs_instance_crn != null && var.existing_brs_instance_crn != "null" && var.existing_brs_instance_crn != "" ? var.existing_brs_instance_crn : ""
+  crn     = var.existing_brs_instance_crn != null && var.existing_brs_instance_crn != "" ? var.existing_brs_instance_crn : ""
 }
 
 ##############################################################################
@@ -94,7 +94,7 @@ module "backup_recovery_instance" {
   resource_group_id         = var.brs_resource_group_id != null ? var.brs_resource_group_id : var.cluster_resource_group_id
   ibmcloud_api_key          = var.ibmcloud_api_key
   instance_name             = var.brs_instance_name
-  existing_brs_instance_crn = var.existing_brs_instance_crn != "null" && var.existing_brs_instance_crn != "" ? var.existing_brs_instance_crn : null
+  existing_brs_instance_crn = var.existing_brs_instance_crn != null && var.existing_brs_instance_crn != "" ? var.existing_brs_instance_crn : null
   create_new_instance       = var.create_new_brs_instance
   connection_name           = var.brs_connection_name
   create_new_connection     = var.brs_create_new_connection
@@ -307,13 +307,15 @@ module "brs_s2s_auth" {
 # Virtual Private Endpoint Gateway for BRS
 ##############################################################################
 
-# Resolve the VPC name from the cluster's worker-pool data source so the VPEG
-# module can generate a stable, deterministic name without requiring a separate
-# ibm_is_vpc data source lookup.
+# VPE Gateway naming: use a short, fixed vpc_name to avoid exceeding IBM's
+# 63-character resource name limit. The vpc_name is only used in the VPE name
+# template (e.g., "<prefix>-<vpc_name>-vpe-gateway"); the actual vpc_id is
+# specified separately and is what matters for API operations.
+# Using the VPC UUID (36+ chars) would cause the final VPE name to exceed 63 chars.
 locals {
-  # vpc_name is used only in the VPE name template.
-  # Use the auto-resolved VPC ID (never unknown at the point this is used).
-  brs_vpe_vpc_name = local.is_vpc ? local.resolved_vpc_id : "vpc"
+  # vpc_name is used only in the VPE name template; the actual vpc_id is passed separately.
+  # Using a fixed string keeps the final VPE gateway name within the 63-character limit.
+  brs_vpe_vpc_name = local.is_vpc ? "vpc" : "vpc"
 }
 
 module "brs_vpe" {
@@ -527,6 +529,32 @@ resource "terraform_data" "dsc_immutable_values" {
 
   depends_on = [kubernetes_namespace_v1.dsc_namespace]
 }
+##############################################################################
+# Check for existing BRS agent namespaces (conflict detection)
+##############################################################################
+
+# If a brs-backup-agent-* namespace already exists on the cluster, it means
+# the cluster is already registered to a BRS instance. We should not silently
+# overwrite or re-attach the cluster to a new BRS instance, as this would
+# fragment backup data across BRS instances and confuse customers.
+# Exit early with a clear explanation of what the customer must do.
+resource "terraform_data" "check_existing_registration" {
+  input = {
+    kubeconfig_path = data.ibm_container_cluster_config.cluster_config.config_file_path
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = self.input.kubeconfig_path
+    }
+    command = "${path.module}/scripts/check-existing-registration.sh"
+  }
+
+  depends_on = [data.ibm_container_cluster_config.cluster_config]
+}
+
+
 
 ##############################################################################
 # Purge stale DSC PVCs before Helm install
@@ -556,7 +584,10 @@ resource "terraform_data" "purge_stale_dsc_pvc" {
     command = "${path.module}/scripts/purge-stale-dsc-pvc.sh '${self.input.namespace}' '${self.input.dsc_name}'"
   }
 
-  depends_on = [kubernetes_namespace_v1.dsc_namespace]
+  depends_on = [
+    kubernetes_namespace_v1.dsc_namespace,
+    terraform_data.check_existing_registration
+  ]
 }
 
 ##############################################################################
@@ -776,11 +807,12 @@ resource "ibm_backup_recovery_source_registration" "source_registration" {
 # the DSC connection cleanup script runs on the BRS instance side.
 # destroy_duration fires between source_registration destruction and the
 # namespace wait, giving BRS time to process the async deregistration.
-# 15m matches the pre_connection_delete_wait in tests/resources-cross-cluster/
-# — both guard the same BRS async deregistration window.
+# 20m: BRS backend globally releases the cluster endpoint registration only
+# after full internal cleanup; 10m was not sufficient — consecutive runs on
+# the same cluster hit "already registered to brs-backup-agent-<id>" errors.
 resource "time_sleep" "brs_source_deregistration_wait" {
   depends_on       = [terraform_data.wait_before_helm_destroy]
-  destroy_duration = "10m"
+  destroy_duration = "20m"
 }
 
 # Wait for namespace cleanup during destroy before destroying helm release.
